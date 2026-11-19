@@ -28,7 +28,8 @@ export function LineChart({
   if (!values.length) return <T sub>لسه مفيش بيانات</T>;
   const hi = max ?? Math.max(...values, 1);
   const lo = Math.min(0, ...values);
-  const x = (i: number) => (values.length === 1 ? W / 2 : pad + (i * (W - pad * 2)) / (values.length - 1));
+  // Arabic reads right→left: the first point sits on the right.
+  const x = (i: number) => (values.length === 1 ? W / 2 : W - pad - (i * (W - pad * 2)) / (values.length - 1));
   const y = (v: number) => H - 24 - ((v - lo) / (hi - lo || 1)) * (H - 40);
   const d = values.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' ');
   const stroke = color ?? (dark ? '#F2F2EF' : c.ink);

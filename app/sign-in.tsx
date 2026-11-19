@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Logo, Mee } from '@/components/mee';
+import { Logo, MeeArt } from '@/components/mee';
 import { Btn, Card, Field, Segmented, T } from '@/components/ui';
 import { signIn, signUp } from '@/lib/auth';
 import { useTheme } from '@/lib/theme';
@@ -38,7 +38,7 @@ export default function SignIn() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, justifyContent: 'center', padding: 22, gap: 18 }}>
         <View style={{ alignItems: 'center', gap: 10 }}>
           <Logo size={56} />
-          <Mee mood="happy" size={90} />
+          <MeeArt size={110} />
           <T size={24} w="bold">
             أهلاً في me
           </T>

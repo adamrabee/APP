@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { Linking, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
-import { Bar, Btn, Card, Check, Chips, confirm, Empty, Field, IconBtn, Pill, Row, Screen, SectionTitle, Sheet, T } from '@/components/ui';
+import { router } from 'expo-router';
+import { useState, type ReactNode } from 'react';
+import { Image, Linking, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { art } from '@/components/mee';
+import { Bar, Btn, Card, Check, Chips, confirm, Empty, Field, IconBtn, Pill, Row, Sheet, T } from '@/components/ui';
 import { logActivity, toggleWorkTask } from '@/lib/actions';
 import { addDays, cleanYmd, durationLabel, shortLabel, today } from '@/lib/dates';
 import { get, insert, remove, update, upsertOwn, useNow, useOwn, useQuery, type Row as DbRow } from '@/lib/db';
@@ -16,41 +19,108 @@ const areas: { value: Area; label: string; icon: any }[] = [
   { value: 'notes', label: 'الملاحظات', icon: 'document-text-outline' },
 ];
 
+/** Work keeps its own neutral grey palette in the design. */
+const W = { bg: '#F6F6F6', ink: '#1F1F1F', sub: '#6B6B6B', soft: '#F1F1F1', line: '#ECECEC', tab: '#7A7A7A', rule: '#E6E4E0' };
+
 /** §4.12 Work: 4 areas + a home page. Starts empty. */
 export default function Work() {
   const [area, setArea] = useState<Area>('home');
   const [quick, setQuick] = useState(false);
   const [search, setSearch] = useState(false);
-  const { c } = useTheme();
+  const { c, mode } = useTheme();
+  const bg = mode === 'dark' ? c.bg : W.bg;
   return (
-    <Screen
-      title="الشغل"
-      right={
-        <Row gap={2}>
-          <IconBtn name="search" onPress={() => setSearch(true)} />
-          <IconBtn name="ellipsis-horizontal" onPress={() => setQuick(true)} />
-          <IconBtn name="add-circle" onPress={() => setQuick(true)} />
-        </Row>
-      }
-    >
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        {areas.map((a) => (
-          <Pressable key={a.value} onPress={() => setArea(a.value)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: area === a.value ? c.ink : c.card }}>
-            <Ionicons name={a.icon} size={16} color={area === a.value ? c.onInk : c.text} />
-            <T size={13} w="medium" color={area === a.value ? c.onInk : c.text}>
-              {a.label}
-            </T>
-          </Pressable>
-        ))}
+    <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={['top']}>
+      <ScrollView keyboardShouldPersistTaps="handled" stickyHeaderIndices={[1]} contentContainerStyle={{ paddingBottom: 130 }}>
+        <View style={{ paddingHorizontal: 18, paddingTop: 12, gap: 12 }}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Pressable onPress={() => router.navigate('/')} style={boxStyle(c, mode)}>
+              <Ionicons name="home-outline" size={20} color={c.text} />
+            </Pressable>
+            <View style={[boxStyle(c, mode), { width: undefined, flexDirection: 'row', alignItems: 'center' }]}>
+              <Pressable onPress={() => setSearch(true)} style={{ width: 46, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="search" size={19} color={c.text} />
+              </Pressable>
+              <View style={{ width: 1, height: 22, backgroundColor: '#DEDEDE' }} />
+              <Pressable onPress={() => setQuick(true)} style={{ width: 46, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="ellipsis-horizontal" size={19} color={c.text} />
+              </Pressable>
+            </View>
+          </Row>
+          <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <View style={{ gap: 2 }}>
+              <T size={40} w="bold" lh={1.1} style={{ letterSpacing: -0.5 }}>
+                الشغل
+              </T>
+              <T size={15} w="medium" color={W.sub}>
+                خطّط. نفّذ. أنجز.
+              </T>
+            </View>
+            <Image source={art.work} style={{ width: 170, height: 80 }} resizeMode="contain" />
+          </Row>
+        </View>
+        <View style={{ backgroundColor: bg, paddingHorizontal: 18 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 2, borderBottomWidth: 1, borderBottomColor: W.rule }}>
+            {areas.map((a) => {
+              const on = area === a.value;
+              return (
+                <Pressable key={a.value} onPress={() => setArea(a.value)} style={{ minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6, borderBottomWidth: 2, borderBottomColor: on ? c.text : 'transparent' }}>
+                  <Ionicons name={a.icon} size={16} color={on ? c.text : W.tab} />
+                  <T size={14} w={on ? 'bold' : 'medium'} color={on ? c.text : W.tab}>
+                    {a.label}
+                  </T>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+        <View style={{ paddingHorizontal: 18, paddingTop: 14, gap: 14 }}>
+          {area === 'home' && <Home go={setArea} />}
+          {area === 'inbox' && <Inbox />}
+          {area === 'tasks' && <TaskColumns />}
+          {area === 'projects' && <Projects />}
+          {area === 'notes' && <Notes />}
+        </View>
       </ScrollView>
-      {area === 'home' && <Home go={setArea} />}
-      {area === 'inbox' && <Inbox />}
-      {area === 'tasks' && <TaskColumns />}
-      {area === 'projects' && <Projects />}
-      {area === 'notes' && <Notes />}
       <QuickAdd visible={quick} onClose={() => setQuick(false)} />
       <Search visible={search} onClose={() => setSearch(false)} />
-    </Screen>
+    </SafeAreaView>
+  );
+}
+
+const boxStyle = (c: any, mode: string) => ({
+  width: 46,
+  height: 46,
+  borderRadius: 16,
+  backgroundColor: mode === 'dark' ? c.card : W.soft,
+  borderWidth: 1,
+  borderColor: mode === 'dark' ? c.border : '#E9E9E9',
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+});
+
+/** White bordered section card used across the Work tab. */
+function WCard({ title, icon, onAll, children, gap = 12 }: { title?: string; icon?: any; onAll?: () => void; children: ReactNode; gap?: number }) {
+  const { c, mode } = useTheme();
+  return (
+    <View style={{ backgroundColor: c.card, borderWidth: 1, borderColor: mode === 'dark' ? c.border : W.line, borderRadius: 24, padding: 16, gap, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 1 }}>
+      {title ? (
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Row gap={8}>
+            {icon ? <Ionicons name={icon} size={18} color={c.text} /> : null}
+            <T size={18} w="bold">
+              {title}
+            </T>
+          </Row>
+          {onAll ? (
+            <T size={13} color="#4A4A4A" onPress={onAll}>
+              الكل ‹
+            </T>
+          ) : null}
+        </Row>
+      ) : null}
+      {children}
+    </View>
   );
 }
 
@@ -110,7 +180,7 @@ function TaskRow({ t, onPress }: { t: DbRow; onPress?: () => void }) {
 
 // ───────── home (WK-01, WK-07, WK-12, WK-13) ─────────
 function Home({ go }: { go: (a: Area) => void }) {
-  const { c } = useTheme();
+  const { c, mode } = useTheme();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const d = today();
@@ -124,134 +194,143 @@ function Home({ go }: { go: (a: Area) => void }) {
   const [pickFocus, setPickFocus] = useState(false);
   const focus = get('work_tasks', state?.focus_task_id);
   const todayTasks = tasks.filter((t) => !t.done && t.due_date && t.due_date <= d);
-  const upcoming = tasks.filter((t) => !t.done && (!t.due_date || t.due_date > d)).slice(0, 5);
+  const upcoming = tasks.filter((t) => !t.done && (!t.due_date || t.due_date > d));
   const progress = (p: DbRow) => {
     const pt = tasks.filter((t) => t.project_id === p.id);
     return pt.length ? pt.filter((t) => t.done).length / pt.length : 0;
   };
-  const empty = !inbox.length && !tasks.length && !projects.length && !notes.length;
-
-  const FocusCard = (
-    <Card tint={c.ink}>
-      <T size={12} color={c.onInk} style={{ opacity: 0.7 }}>
-        مهمة التركيز
-      </T>
-      {focus && !focus.done ? (
-        <>
-          <T size={18} w="bold" color={c.onInk}>
-            {focus.title}
-          </T>
-          <Row>
-            <Btn
-              small
-              kind="soft"
-              title={timer.running?.id === focus.id ? durationLabel(timer.elapsed * 1000) : 'ابدأ دلوقتي'}
-              icon={timer.running?.id === focus.id ? 'pause' : 'play'}
-              onPress={() => (timer.running?.id === focus.id ? timer.stop() : timer.start(focus))}
-            />
-            <Btn small kind="soft" title="خلصت" icon="checkmark" onPress={() => (toggleWorkTask(focus), upsertOwn('work_state', { focus_task_id: null }))} />
-            <IconBtn name="swap-horizontal" color={c.onInk} onPress={() => setPickFocus(true)} />
-          </Row>
-        </>
-      ) : (
-        <Btn small kind="soft" title="اختار مهمة واحدة تركز عليها" onPress={() => setPickFocus(true)} />
-      )}
-    </Card>
-  );
+  const stats: { label: string; value: number; icon: any; go: Area }[] = [
+    { label: 'الوارد', value: inbox.length, icon: 'file-tray-outline', go: 'inbox' },
+    { label: 'مهام النهارده', value: todayTasks.length, icon: 'today-outline', go: 'tasks' },
+    { label: 'المهام الجاية', value: upcoming.length, icon: 'calendar-outline', go: 'tasks' },
+    { label: 'مشاريع شغالة', value: projects.length, icon: 'folder-open-outline', go: 'projects' },
+  ];
 
   return (
     <>
-      {empty && (
-        <Card>
-          <Empty text="الشغل بيبدأ فاضي. سجّل أي فكرة في الوارد وحوّلها بعدين." mood="coffee" />
-        </Card>
-      )}
-      <View style={{ flexDirection: wide ? 'row' : 'column', gap: 14 }}>
-        <View style={{ flex: 1, gap: 14 }}>
-          <Card onPress={() => go('inbox')} style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="file-tray-outline" size={22} color={c.text} />
-            <T w="semibold" style={{ flex: 1 }}>
-              الوارد
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        {stats.map((s) => (
+          <Pressable
+            key={s.label}
+            onPress={() => go(s.go)}
+            style={{ width: wide ? '23.5%' : '48.4%', backgroundColor: c.card, borderWidth: 1, borderColor: mode === 'dark' ? c.border : W.line, borderRadius: 22, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+          >
+            <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: mode === 'dark' ? c.bg : '#F0F0F0', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name={s.icon} size={20} color={c.text} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <T size={24} w="bold" lh={1.1}>
+                {s.value}
+              </T>
+              <T size={12} color={W.sub} lines={1}>
+                {s.label}
+              </T>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+
+      <WCard title="ركّز على" icon="locate-outline">
+        {focus && !focus.done ? (
+          <View style={{ gap: 10 }}>
+            <T size={17} w="bold">
+              {focus.title}
             </T>
-            <Pill text={String(inbox.length)} />
-          </Card>
-          {inbox.slice(0, 3).map((i) => (
-            <T key={i.id} size={13} sub lines={1}>
+            <Row>
+              <Btn
+                small
+                title={timer.running?.id === focus.id ? durationLabel(timer.elapsed * 1000) : 'ابدأ دلوقتي'}
+                icon={timer.running?.id === focus.id ? 'pause' : 'play'}
+                onPress={() => (timer.running?.id === focus.id ? timer.stop() : timer.start(focus))}
+              />
+              <Btn small kind="ghost" title="خلصت" icon="checkmark" onPress={() => (toggleWorkTask(focus), upsertOwn('work_state', { focus_task_id: null }))} />
+              <IconBtn name="swap-horizontal" onPress={() => setPickFocus(true)} />
+            </Row>
+          </View>
+        ) : (
+          <Pressable onPress={() => setPickFocus(true)} style={{ borderRadius: 18, backgroundColor: mode === 'dark' ? c.bg : '#F4F4F4', borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#DADADA', padding: 16 }}>
+            <T size={13} color={W.sub} lh={1.7}>
+              مفيش مهمة تركيز.{'\n'}اضغط هنا واختار مهمة واحدة تركّز عليها.
+            </T>
+          </Pressable>
+        )}
+      </WCard>
+
+      <WCard title="مهام النهارده" icon="checkbox-outline" onAll={() => go('tasks')} gap={4}>
+        {todayTasks.length === 0 ? (
+          <T size={13} color={W.sub}>
+            مفيش مهام النهارده.
+          </T>
+        ) : (
+          todayTasks.slice(0, 6).map((t) => <TaskRow key={t.id} t={t} />)
+        )}
+      </WCard>
+
+      <WCard title="الوارد" icon="file-tray-outline" onAll={() => go('inbox')} gap={4}>
+        {inbox.length === 0 ? (
+          <T size={13} color={W.sub} style={{ paddingVertical: 6 }}>
+            الوارد فاضي. اضغط ⋯ فوق أو + عشان تسجّل أي حاجة.
+          </T>
+        ) : (
+          inbox.slice(0, 4).map((i) => (
+            <T key={i.id} size={14} lines={1} style={{ paddingVertical: 6 }}>
               • {i.text}
             </T>
-          ))}
-        </View>
-        <View style={{ flex: 1, gap: 14 }}>
-          {FocusCard}
-          <SectionTitle action="الكل" onAction={() => go('tasks')}>
-            مهام النهارده
-          </SectionTitle>
-          <Card style={{ gap: 0 }}>
-            {todayTasks.length === 0 && <T sub>مفيش مهام النهارده.</T>}
-            {todayTasks.map((t) => (
-              <TaskRow key={t.id} t={t} />
-            ))}
-          </Card>
-          {upcoming.length > 0 && (
-            <>
-              <SectionTitle>الجاي</SectionTitle>
-              <Card style={{ gap: 0 }}>
-                {upcoming.map((t) => (
-                  <TaskRow key={t.id} t={t} />
-                ))}
-              </Card>
-            </>
-          )}
-        </View>
-        <View style={{ flex: 1, gap: 14 }}>
-          <SectionTitle action="الكل" onAction={() => go('projects')}>
-            المشاريع الشغالة
-          </SectionTitle>
-          {projects.length === 0 && <T sub>مفيش مشاريع.</T>}
-          {projects.slice(0, 4).map((p) => (
-            <Card key={p.id} onPress={() => go('projects')} style={{ gap: 6 }}>
-              <Row>
-                <T w="semibold" style={{ flex: 1 }}>
-                  {p.name}
-                </T>
-                <T size={12} sub>
-                  {Math.round(progress(p) * 100)}%
-                </T>
-              </Row>
-              <Bar value={progress(p)} color={c.ink} />
-            </Card>
-          ))}
-          {notes.length > 0 && (
-            <>
-              <SectionTitle action="الكل" onAction={() => go('notes')}>
-                الملاحظات
-              </SectionTitle>
-              {notes.slice(0, 3).map((n) => (
-                <T key={n.id} size={13} lines={1}>
-                  📝 {n.title || n.body}
-                </T>
-              ))}
-            </>
-          )}
-        </View>
-      </View>
-      {activity.length > 0 && (
-        <>
-          <SectionTitle>آخر النشاط</SectionTitle>
-          <Card style={{ gap: 4 }}>
-            {activity.slice(0, 8).map((a) => (
-              <Row key={a.id}>
-                <T size={12} style={{ flex: 1 }}>
-                  {a.text}
-                </T>
-                <T size={10} faint>
-                  {shortLabel(String(a.created_at).slice(0, 10))}
-                </T>
-              </Row>
-            ))}
-          </Card>
-        </>
-      )}
+          ))
+        )}
+      </WCard>
+
+      <WCard title="المشاريع" icon="folder-outline" onAll={() => go('projects')}>
+        {projects.length === 0 && (
+          <T size={13} color={W.sub}>
+            مفيش مشاريع لسه.
+          </T>
+        )}
+        {projects.slice(0, 4).map((p) => (
+          <Pressable key={p.id} onPress={() => go('projects')} style={{ gap: 6 }}>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <T w="semibold">{p.name}</T>
+              <T size={12} color={W.sub}>
+                {Math.round(progress(p) * 100)}%
+              </T>
+            </Row>
+            <Bar value={progress(p)} color={c.text} />
+          </Pressable>
+        ))}
+      </WCard>
+
+      <WCard title="الملاحظات" icon="document-text-outline" onAll={() => go('notes')}>
+        {notes.length === 0 ? (
+          <T size={13} color={W.sub}>
+            مفيش ملاحظات لسه.
+          </T>
+        ) : (
+          notes.slice(0, 3).map((n) => (
+            <T key={n.id} size={14} lines={1}>
+              {n.title || n.body}
+            </T>
+          ))
+        )}
+      </WCard>
+
+      <WCard title="آخر حاجات" icon="time-outline" gap={6}>
+        {activity.length === 0 && (
+          <T size={13} color={W.sub}>
+            لسه مفيش نشاط.
+          </T>
+        )}
+        {activity.slice(0, 8).map((a) => (
+          <Row key={a.id}>
+            <T size={13} style={{ flex: 1 }} lines={1}>
+              {a.text}
+            </T>
+            <T size={11} color={W.sub}>
+              {shortLabel(String(a.created_at).slice(0, 10))}
+            </T>
+          </Row>
+        ))}
+      </WCard>
+
       <Sheet visible={pickFocus} onClose={() => setPickFocus(false)} title="مهمة التركيز">
         {tasks.filter((t) => !t.done).length === 0 && <T sub>ضيف مهام الأول.</T>}
         {tasks
