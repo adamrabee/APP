@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '@/lib/theme';
 
@@ -83,35 +83,26 @@ export function Mee({ mood = 'calm', size = 80 }: { mood?: Mood; size?: number }
   );
 }
 
-/** App logo: white "m" with a dot inside a black rounded square (BRD §5). */
-export function Logo({ size = 34 }: { size?: number }) {
-  return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size} height={size} viewBox="0 0 100 100">
-        <Rect x="0" y="0" width="100" height="100" rx="24" fill="#111111" />
-        <Path
-          d="M24 70 V40 q0 -8 8 -8 q8 0 8 8 V70 M40 40 q0 -8 8 -8 q8 0 8 8 V70"
-          stroke="#FFFFFF"
-          strokeWidth="8"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <Circle cx="72" cy="66" r="6" fill="#FFFFFF" />
-      </Svg>
-    </View>
-  );
+/** App logo from the design (white m + dot in a black rounded square). */
+export function Logo({ size = 44 }: { size?: number }) {
+  return <Image source={require('@/assets/design/logo.png')} style={{ width: size, height: size }} />;
+}
+
+/** Design illustrations. */
+export const art = {
+  mee: require('@/assets/design/mee-wave.png'),
+  worship: require('@/assets/design/worship.png'),
+  skillTree: require('@/assets/design/skill-tree.png'),
+  work: require('@/assets/design/work.png'),
+  skincare: require('@/assets/design/skincare.png'),
+};
+
+/** The 3D MEE from the design (waving / happy). */
+export function MeeArt({ size = 56 }: { size?: number }) {
+  return <Image source={art.mee} style={{ width: size, height: size }} resizeMode="contain" />;
 }
 
 /** Skincare section logo: cream jar with two stars and a dot, black, no frame. */
-export function JarLogo({ size = 34, color = '#111111' }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 100 100">
-      <Rect x="22" y="46" width="56" height="38" rx="10" fill={color} />
-      <Rect x="18" y="34" width="64" height="14" rx="6" fill={color} />
-      <Path d="M66 10 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill={color} />
-      <Path d="M84 24 l2 4 4 2 -4 2 -2 4 -2 -4 -4 -2 4 -2z" fill={color} />
-      <Circle cx="48" cy="20" r="3.5" fill={color} />
-    </Svg>
-  );
+export function JarLogo({ size = 34 }: { size?: number; color?: string }) {
+  return <Image source={art.skincare} style={{ width: size, height: size * 0.85 }} resizeMode="contain" />;
 }

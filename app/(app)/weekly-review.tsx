@@ -1,44 +1,51 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { LineChart } from '@/components/charts';
-import { Mee } from '@/components/mee';
+import { MeeArt } from '@/components/mee';
 import { Row, Screen, T } from '@/components/ui';
 import { meeDown, meeSame, meeUp, sectionLabels, suggestions } from '@/lib/content';
 import { addDays, parseYmd, shortLabel, weekdayShort, weekStart } from '@/lib/dates';
 import { insert, rows, update, useOwn, useQuery, useRows } from '@/lib/db';
 import { weekReport } from '@/lib/score';
+import { useTheme } from '@/lib/theme';
 
-const INK = '#F2F2EF';
-const SUB = '#9BA19C';
-const CARD = '#1B1E1C';
+const TABLES = ['tasks', 'work_tasks', 'habits', 'habit_logs', 'prayer_logs', 'subjects', 'study_sessions', 'skincare_steps', 'routine_logs', 'workouts', 'transactions'];
 
-/** §4.10 weekly review with MEE — always dark (R-01…R-06). */
+/** §4.10 weekly review with MEE — follows the app theme (design). */
 export default function WeeklyReview() {
+  const { c } = useTheme();
   const profile = useOwn('profiles');
-  // load everything the score depends on
-  for (const t of ['tasks', 'work_tasks', 'habits', 'habit_logs', 'prayer_logs', 'subjects', 'study_sessions', 'skincare_steps', 'routine_logs', 'workouts', 'transactions']) useRows(t); // eslint-disable-line react-hooks/rules-of-hooks
-  const history = useQuery('weekly_reviews', undefined, (a, b) => b.week_start.localeCompare(a.week_start));
+  for (const t of TABLES) useRows(t); // eslint-disable-line react-hooks/rules-of-hooks
+  const prayers = useRows('prayer_logs');
+  const sessions = useRows('study_sessions');
   const [week, setWeek] = useState(weekStart());
   const weights = (profile?.score_weights as Record<string, number>) ?? {};
   const cur = weekReport(week, weights);
   const prev = weekReport(addDays(week, -7), weights);
   const diff = Math.round((cur.score - prev.score) * 10) / 10;
+  const end = addDays(week, 7);
+  const inWeek = (d: string) => d >= week && d < end;
+  const studyMins = sessions.filter((s) => inWeek(String(s.started_at).slice(0, 10))).reduce((a, s) => a + s.minutes, 0);
+  const prevStudy = sessions.filter((s) => String(s.started_at).slice(0, 10) >= addDays(week, -7) && String(s.started_at).slice(0, 10) < week).reduce((a, s) => a + s.minutes, 0);
+  const onTime = prayers.filter((p) => inWeek(p.date) && p.status === 'on_time').length;
 
-  // R-03: up or down per section (money: spending less = up)
+  // R-03 up or down (money: spending less = up)
   const table = ['study', 'prayers', 'habits', 'routine', 'gym', 'money'].map((k) => {
     const a = cur.section[k];
     const b = prev.section[k];
-    let dir: 'up' | 'down' | 'same' | 'na' = 'na';
-    if (a !== undefined && b !== undefined) dir = a === b ? 'same' : k === 'money' ? (a < b ? 'up' : 'down') : a > b ? 'up' : 'down';
-    else if (a !== undefined) dir = 'same';
-    return { k, label: sectionLabels[k] ?? k, a, dir };
+    let dir: 'up' | 'down' | 'same' = 'same';
+    if (a !== undefined && b !== undefined && a !== b) dir = k === 'money' ? (a < b ? 'up' : 'down') : a > b ? 'up' : 'down';
+    const value = a === undefined ? '—' : k === 'study' ? `${Math.round((studyMins / 60) * 10) / 10} س` : k === 'prayers' ? `${onTime} / 35` : k === 'gym' ? `${a} جلسة` : k === 'money' ? `${a} ر.س` : `${a}%`;
+    return { k, label: k === 'prayers' ? 'الصلاة في وقتها' : sectionLabels[k] ?? k, value, dir };
   });
-  const weakest = table.filter((x) => x.dir === 'down')[0]?.k ?? (Object.entries(cur.section).filter(([k]) => k in suggestions && k !== 'gym' && k !== 'money').sort((x, y) => x[1] - y[1])[0]?.[0] ?? 'tasks');
-  const mood = diff > 0.2 ? 'happy' : diff < -0.2 ? 'sad' : cur.score >= 7 ? 'stars' : 'calm';
+  const weakest = table.find((x) => x.dir === 'down')?.k ?? 'study';
   const pool = diff > 0.2 ? meeUp : diff < -0.2 ? meeDown : meeSame;
   const message = pool[parseYmd(week).getDate() % pool.length];
+  const studyDiff = Math.round(((studyMins - prevStudy) / 60) * 10) / 10;
+  const detail = studyDiff ? ` المذاكرة ${studyDiff > 0 ? 'زادت' : 'قلّت'} ${Math.abs(studyDiff)} ساعة.` : '';
 
-  // save/refresh this week's review row
   useEffect(() => {
     if (!cur.scores.some((s) => s !== null)) return;
     const existing = rows('weekly_reviews').find((r) => r.week_start === week);
@@ -48,97 +55,136 @@ export default function WeeklyReview() {
     } else insert('weekly_reviews', vals);
   }, [week, cur.score, cur.bestDay]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const history = useQuery('weekly_reviews', (r) => r.week_start < weekStart(), (a, b) => b.week_start.localeCompare(a.week_start));
   const bestIdx = cur.bestDay ? cur.days.indexOf(cur.bestDay) : -1;
+  const isThis = week === weekStart();
 
   return (
-    <Screen back title="مراجعة الأسبوع" dark>
-      <Row>
-        <Pressable onPress={() => setWeek(addDays(week, -7))}>
-          <T color={SUB}>‹ الأسبوع اللي فات</T>
+    <Screen>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Pressable onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 }}>
+          <Ionicons name="chevron-forward" size={18} color={c.text} />
+          <T size={14} w="medium">
+            اليوم
+          </T>
         </Pressable>
-        <T w="semibold" color={INK} center style={{ flex: 1 }}>
-          {shortLabel(week)} – {shortLabel(addDays(week, 6))}
-        </T>
-        {week < weekStart() && (
-          <Pressable onPress={() => setWeek(addDays(week, 7))}>
-            <T color={SUB}>الجاي ›</T>
-          </Pressable>
-        )}
+        <View style={{ flexDirection: 'row', backgroundColor: c.card, borderRadius: 999, padding: 3 }}>
+          {(
+            [
+              [weekStart(), 'الأسبوع ده'],
+              [addDays(weekStart(), -7), 'اللي فات'],
+            ] as const
+          ).map(([w, label]) => (
+            <Pressable key={w} onPress={() => setWeek(w)} style={{ minHeight: 36, paddingHorizontal: 14, borderRadius: 999, justifyContent: 'center', backgroundColor: week === w ? c.bg : 'transparent' }}>
+              <T size={13} w="semibold" color={week === w ? c.text : c.sub2}>
+                {label}
+              </T>
+            </Pressable>
+          ))}
+        </View>
       </Row>
 
-      <View style={{ backgroundColor: CARD, borderRadius: 22, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        <Mee mood={mood} size={86} />
-        <View style={{ flex: 1, gap: 2 }}>
-          <T color={SUB} size={13}>
-            سكور الأسبوع
+      <View style={{ backgroundColor: c.card, borderRadius: 28, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <T size={15} color={c.sub2}>
+            {shortLabel(week)} – {shortLabel(addDays(week, 6))}
           </T>
-          <T color={INK} size={40} w="bold">
+          <T size={72} w="light" lh={1} style={{ letterSpacing: -1 }}>
             {cur.score}
-            <T color={SUB} size={18}>
-              /10
-            </T>
           </T>
-          <T color={diff >= 0 ? '#8DB39A' : '#E08A76'} w="semibold">
+          <T size={15} w="semibold" color={diff >= 0 ? c.primary : c.danger}>
             {diff > 0 ? `طالع ↑ ${diff}` : diff < 0 ? `نازل ↓ ${-diff}` : 'زي الأسبوع اللي فات'}
+          </T>
+          <T size={12} sub>
+            من 10 · {isThis ? 'لحد النهارده' : 'الأسبوع كامل'}
+          </T>
+        </View>
+        <View style={{ width: 128, alignItems: 'center', gap: 8 }}>
+          <MeeArt size={128} />
+          <T size={11} w="semibold" sub style={{ letterSpacing: 1 }}>
+            MEE
           </T>
         </View>
       </View>
 
-      <View style={{ backgroundColor: CARD, borderRadius: 22, padding: 16, gap: 8 }}>
-        <T color={INK} w="semibold">
-          سكور كل يوم {cur.bestDay ? `· أحسن يوم ${weekdayShort[parseYmd(cur.bestDay).getDay()]}` : ''}
+      <View style={{ backgroundColor: c.primarySoft, borderRadius: 20, paddingVertical: 14, paddingHorizontal: 16 }}>
+        <T size={14} w="medium" lh={1.6}>
+          {message}
+          {detail}
         </T>
-        <LineChart dark values={cur.scores.map((s) => s ?? 0)} labels={cur.days.map((d) => weekdayShort[parseYmd(d).getDay()])} max={10} highlight={bestIdx} />
       </View>
 
-      <View style={{ backgroundColor: CARD, borderRadius: 22, padding: 16, gap: 10 }}>
-        <T color={INK} w="semibold">
+      <View style={{ backgroundColor: c.card, borderRadius: 28, paddingTop: 18, paddingHorizontal: 16, paddingBottom: 12, gap: 12 }}>
+        <Row gap={8}>
+          <MiniStat label="مذاكرة" value={`${Math.floor(studyMins / 60)}س ${studyMins % 60}د`} />
+          <MiniStat label="صلاة في وقتها" value={`${onTime} / 35`} />
+          <MiniStat label="أحسن يوم" value={cur.bestDay ? weekdayShort[parseYmd(cur.bestDay).getDay()] : '—'} />
+        </Row>
+        <LineChart values={cur.scores.map((s) => s ?? 0)} labels={cur.days.map((d) => weekdayShort[parseYmd(d).getDay()])} max={10} highlight={bestIdx} color={c.primary} />
+      </View>
+
+      <View style={{ backgroundColor: c.card, borderRadius: 28, paddingVertical: 6, paddingHorizontal: 18 }}>
+        <T size={13} w="semibold" sub style={{ marginTop: 12, marginBottom: 4 }}>
           طالع ولا نازل؟
         </T>
-        {table.map((r) => (
-          <Row key={r.k}>
-            <T color={INK} style={{ flex: 1 }}>
+        {table.map((r, i) => (
+          <Row key={r.k} style={{ minHeight: 52, borderBottomWidth: i === table.length - 1 ? 0 : 1, borderBottomColor: c.line }}>
+            <T w="medium" style={{ flex: 1 }}>
               {r.label}
             </T>
-            <T color={SUB} size={12}>
-              {r.a === undefined ? '—' : r.k === 'gym' ? `${r.a} جلسة` : r.k === 'money' ? `${r.a} ر.س` : `${r.a}%`}
+            <T size={14} color={c.sub2}>
+              {r.value}
             </T>
-            <T w="bold" color={r.dir === 'up' ? '#8DB39A' : r.dir === 'down' ? '#E08A76' : SUB} style={{ width: 28 }} center>
-              {r.dir === 'up' ? '↑' : r.dir === 'down' ? '↓' : '–'}
-            </T>
+            <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: r.dir === 'up' ? c.primarySoft : r.dir === 'down' ? c.acc.health.bg : c.line }}>
+              <T size={13} w="bold" color={r.dir === 'up' ? c.primaryDark : r.dir === 'down' ? c.acc.health.fg : c.sub}>
+                {r.dir === 'up' ? '↑' : r.dir === 'down' ? '↓' : '–'}
+              </T>
+            </View>
           </Row>
         ))}
+        <View style={{ height: 8 }} />
       </View>
 
-      <View style={{ backgroundColor: CARD, borderRadius: 22, padding: 16, gap: 6 }}>
-        <T color={INK} w="semibold">
-          MEE بيقول
-        </T>
-        <T color={INK}>{message}</T>
-        <T color={SUB} size={13}>
-          اقتراح للأسبوع الجاي: {suggestions[weakest] ?? suggestions.tasks}
-        </T>
+      <View style={{ backgroundColor: c.card, borderRadius: 28, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <T size={15} w="semibold">
+            خطة الأسبوع الجاي
+          </T>
+          <T size={12} sub lh={1.6}>
+            MEE بيقترح: {suggestions[weakest] ?? suggestions.tasks}
+          </T>
+        </View>
+        <Pressable onPress={() => router.push(weakest === 'study' ? '/study' : weakest === 'prayers' ? '/worship' : weakest === 'routine' ? '/skincare' : '/tasks')} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="arrow-back" size={22} color={c.onInk} />
+        </Pressable>
       </View>
 
-      {history.length > 1 && (
-        <View style={{ backgroundColor: CARD, borderRadius: 22, padding: 16, gap: 8 }}>
-          <T color={INK} w="semibold">
+      {history.length > 0 && (
+        <View style={{ backgroundColor: c.card, borderRadius: 28, paddingVertical: 6, paddingHorizontal: 18 }}>
+          <T size={13} w="semibold" sub style={{ marginTop: 12, marginBottom: 4 }}>
             الأسابيع اللي فاتت
           </T>
-          {history.map((h) => (
-            <Pressable key={h.id} onPress={() => setWeek(h.week_start)}>
-              <Row>
-                <T color={SUB} style={{ flex: 1 }}>
-                  {shortLabel(h.week_start)}
-                </T>
-                <T color={INK} w="semibold">
-                  {h.score}/10
-                </T>
-              </Row>
+          {history.map((h, i) => (
+            <Pressable key={h.id} onPress={() => setWeek(h.week_start)} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 48, borderBottomWidth: i === history.length - 1 ? 0 : 1, borderBottomColor: c.line }}>
+              <T style={{ flex: 1 }}>{shortLabel(h.week_start)}</T>
+              <T w="semibold">{h.score} / 10</T>
             </Pressable>
           ))}
         </View>
       )}
     </Screen>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ flex: 1, gap: 4 }}>
+      <T size={11} w="semibold" sub>
+        {label}
+      </T>
+      <T size={20} w="medium">
+        {value}
+      </T>
+    </View>
   );
 }

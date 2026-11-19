@@ -35,7 +35,7 @@ export default function StudyReports() {
   const totalWeek = week.reduce((a, x) => a + x.minutes, 0);
 
   return (
-    <Screen back title="تقارير المذاكرة">
+    <Screen back="المذاكرة" backColor={c.acc.study.fg} title="تقارير المذاكرة">
       <Row>
         <Stat label="الأسبوع ده" value={`${Math.round(totalWeek / 6) / 10} س`} />
         <Stat label="السلسلة" value={`🔥 ${st.current}`} sub={`الأطول ${st.longest}`} />
@@ -51,7 +51,7 @@ export default function StudyReports() {
       {neglected.length > 0 && (
         <>
           <SectionTitle>مواد مهملة</SectionTitle>
-          <Card tint={c.sec.me}>
+          <Card tint={c.acc.me.bg}>
             {neglected.map((s) => (
               <T key={s.id} color={c.danger}>
                 ⚠️ {s.name} — ما ذاكرتهاش من أسبوع أو أكتر

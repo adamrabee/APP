@@ -25,7 +25,7 @@ export default function Search() {
   ];
   const total = groups.reduce((a, g) => a + g.items.length, 0);
   return (
-    <Screen back title="بحث">
+    <Screen back="اليوم" title="بحث">
       <Field autoFocus placeholder="ابحث في المهام والملاحظات والمصاريف…" value={q} onChangeText={setQ} />
       {s && total === 0 && <T sub center>مفيش نتائج.</T>}
       {groups.map(

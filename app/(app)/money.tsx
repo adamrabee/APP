@@ -50,7 +50,7 @@ export default function Money() {
   };
 
   return (
-    <Screen back title="الفلوس">
+    <Screen back="me" title="الفلوس">
       <Row>
         <IconBtn name="chevron-forward" onPress={() => shift(-1)} />
         <T w="bold" center style={{ flex: 1 }}>

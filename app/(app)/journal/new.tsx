@@ -23,7 +23,7 @@ export default function NewEntry() {
   };
 
   return (
-    <Screen back title="يومية جديدة">
+    <Screen back="me" backColor={c.acc.me.fg} title="يومية جديدة">
       <T w="semibold">عامل إيه النهارده؟</T>
       <Row style={{ justifyContent: 'space-between' }}>
         {moods.map((m) => (
@@ -37,7 +37,7 @@ export default function NewEntry() {
         <>
           <Segmented value={mode} onChange={setMode} options={[{ label: 'سؤال اليوم', value: 'prompt' }, { label: 'كتابة حرة', value: 'free' }]} />
           {mode === 'prompt' && (
-            <Card tint={c.sec.study}>
+            <Card tint={c.acc.study.bg}>
               <T w="semibold" size={16}>
                 {journalPrompts[pi]}
               </T>

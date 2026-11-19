@@ -1,74 +1,113 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, Tabs } from 'expo-router';
+import { router, Tabs, usePathname } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { tap, type IconName } from '@/components/ui';
+import { T, tap } from '@/components/ui';
 import { useRows } from '@/lib/db';
 import { rescheduleAll } from '@/lib/notify';
-import { font, useTheme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
-const tabs: { name: string; title: string; icon: IconName; iconOn: IconName }[] = [
-  { name: 'index', title: 'اليوم', icon: 'sunny-outline', iconOn: 'sunny' },
-  { name: 'tasks', title: 'المهام', icon: 'checkbox-outline', iconOn: 'checkbox' },
-  { name: 'work', title: 'الشغل', icon: 'briefcase-outline', iconOn: 'briefcase' },
-  { name: 'study', title: 'المذاكرة', icon: 'book-outline', iconOn: 'book' },
-  { name: 'me', title: 'me', icon: 'person-circle-outline', iconOn: 'person-circle' },
+// 3D tab icons from the design: soft white when idle, black tile when active.
+const tabs = [
+  { name: 'index', title: 'اليوم', icon: require('@/assets/design/tab-today.png'), on: require('@/assets/design/tab-today-on.png') },
+  { name: 'tasks', title: 'المهام', icon: require('@/assets/design/tab-tasks.png'), on: require('@/assets/design/tab-tasks-on.png') },
+  { name: 'work', title: 'الشغل', icon: require('@/assets/design/tab-work.png'), on: require('@/assets/design/tab-work-on.png') },
+  { name: 'study', title: 'المذاكرة', icon: require('@/assets/design/tab-study.png'), on: require('@/assets/design/tab-study-on.png') },
+  { name: 'me', title: 'me', icon: require('@/assets/design/tab-me.png'), on: require('@/assets/design/tab-me-on.png') },
 ];
 
 export default function TabsLayout() {
-  const { c } = useTheme();
-  const insets = useSafeAreaInsets();
   useNotificationsSync();
   return (
     <View style={{ flex: 1 }}>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: c.ink,
-          tabBarInactiveTintColor: c.faint,
-          tabBarStyle: { backgroundColor: c.card, borderTopColor: c.line, height: 60 + insets.bottom, paddingTop: 6 },
-          tabBarLabelStyle: { fontFamily: font.medium, fontSize: 11 },
-        }}
-      >
+      <Tabs screenOptions={{ headerShown: false }} tabBar={(p: any) => <TabBar {...p} />}>
         {tabs.map((t) => (
-          <Tabs.Screen
-            key={t.name}
-            name={t.name}
-            options={{
-              title: t.title,
-              tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? t.iconOn : t.icon} size={23} color={color as string} />,
-            }}
-          />
+          <Tabs.Screen key={t.name} name={t.name} options={{ title: t.title }} />
         ))}
       </Tabs>
-      {/* H-04: floating quick add, reachable from every tab */}
-      <Pressable
-        onPress={() => {
-          tap();
-          router.push('/quick-add');
-        }}
-        style={({ pressed }) => ({
-          position: 'absolute',
-          left: 20,
-          bottom: 74 + insets.bottom,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: c.ink,
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: pressed ? 0.85 : 1,
-          shadowColor: '#000',
-          shadowOpacity: 0.18,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 6,
-        })}
-      >
-        <Ionicons name="add" size={30} color={c.onInk} />
-      </Pressable>
+      <Fab />
     </View>
+  );
+}
+
+function TabBar({ state, navigation }: { state: any; navigation: any }) {
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <>
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-around',
+          alignItems: 'flex-start',
+          backgroundColor: c.card,
+          borderTopWidth: 1,
+          borderTopColor: c.border,
+          paddingTop: 6,
+          height: 70 + insets.bottom,
+        }}
+      >
+        {state.routes.map((route: any, i: number) => {
+          const t = tabs.find((x) => x.name === route.name);
+          if (!t) return null;
+          const focused = state.index === i;
+          return (
+            <Pressable
+              key={route.key}
+              onPress={() => {
+                tap();
+                const e = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+                if (!focused && !e.defaultPrevented) navigation.navigate(route.name);
+              }}
+              style={{ width: 64, minHeight: 48, alignItems: 'center', gap: 3 }}
+            >
+              <Image source={focused ? t.on : t.icon} style={{ width: 32, height: 32 }} resizeMode="contain" />
+              <T size={11} w={focused ? 'bold' : 'medium'} color={focused ? c.text : c.sub} lh={1.2}>
+                {t.title}
+              </T>
+              <View style={{ width: 18, height: 3, borderRadius: 2, backgroundColor: focused ? c.text : 'transparent' }} />
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
+  );
+}
+
+function Fab() {
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  const onWork = usePathname().startsWith('/work');
+  // H-04 quick add — green rounded square; black on the Work tab (as in the design)
+  return (
+    <Pressable
+      accessibilityLabel="إضافة سريعة"
+      onPress={() => {
+        tap();
+        router.push('/quick-add');
+      }}
+      style={({ pressed }) => ({
+        position: 'absolute',
+        left: onWork ? 18 : 20,
+        bottom: 86 + insets.bottom,
+        width: onWork ? 58 : 56,
+        height: onWork ? 58 : 56,
+        borderRadius: onWork ? 20 : 18,
+        backgroundColor: onWork ? '#1F1F1F' : c.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: pressed ? 0.85 : 1,
+        shadowColor: onWork ? '#000' : c.primary,
+        shadowOpacity: onWork ? 0.24 : 0.28,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
+        zIndex: 10,
+      })}
+    >
+      <Ionicons name="add" size={26} color="#FFFFFF" />
+    </Pressable>
   );
 }
 

@@ -26,7 +26,7 @@ export default function TaskDetail() {
 
   if (!t) {
     return (
-      <Screen back title="مهمة">
+      <Screen back="المهام" title="مهمة">
         <Empty text="المهمة دي اتحذفت." mood="sad" />
       </Screen>
     );

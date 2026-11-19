@@ -20,7 +20,7 @@ export default function HabitDetail() {
   const [month, setMonth] = useState(monthStart());
   if (!h) {
     return (
-      <Screen back title="عادة">
+      <Screen back="المهام" title="عادة">
         <Empty text="العادة دي اتحذفت." mood="sad" />
       </Screen>
     );

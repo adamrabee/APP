@@ -1,106 +1,150 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { LineChart } from '@/components/charts';
 import { Mistakes } from '@/components/mistakes';
 import { SubjectEditor } from '@/components/subject-editor';
-import { Bar, Btn, Card, Chips, confirm, Empty, Field, IconBtn, Pill, Row, Screen, Segmented, Sheet, T } from '@/components/ui';
+import { Btn, Card, Chips, confirm, Empty, Field, IconBtn, ListRow, PillTabs, Row, Screen, Sheet, T } from '@/components/ui';
 import { setUnitStatus } from '@/lib/actions';
-import { cleanYmd, shortLabel, today } from '@/lib/dates';
+import { cleanYmd, diffDays, shortLabel, today, weekStart } from '@/lib/dates';
 import { get, insert, remove, update, useQuery, useRows } from '@/lib/db';
-import { useTheme } from '@/lib/theme';
+import { useTheme, type Accent } from '@/lib/theme';
 
 type Tab = 'units' | 'cards' | 'exams' | 'mistakes' | 'notes';
-const unitStatus = [
-  { label: 'لم يبدأ', value: 'not_started' },
-  { label: 'جارٍ', value: 'in_progress' },
-  { label: 'خلص', value: 'done' },
-  { label: 'يحتاج مراجعة', value: 'needs_review' },
+const unitStatus: { label: string; value: string; acc: Accent }[] = [
+  { label: 'لسه', value: 'not_started', acc: 'neutral' },
+  { label: 'بذاكره', value: 'in_progress', acc: 'study' },
+  { label: 'خلص', value: 'done', acc: 'green' },
+  { label: 'محتاج مراجعة', value: 'needs_review', acc: 'worship' },
 ];
 
 export default function Subject() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { c } = useTheme();
   useRows('subjects');
+  const units = useQuery('subject_units', (u) => u.subject_id === id, undefined, [id]);
+  const sessions = useQuery('study_sessions', (x) => x.subject_id === id, undefined, [id]);
+  const cardsCount = useQuery('flashcards', (f) => f.subject_id === id, undefined, [id]).length;
+  const exams = useQuery('exam_results', (e) => e.subject_id === id, (a, b) => a.date.localeCompare(b.date), [id]);
+  const mistakesCount = useQuery('mistakes', (m) => m.subject_id === id, undefined, [id]).length;
   const s = get('subjects', id);
   const [tab, setTab] = useState<Tab>('units');
   const [edit, setEdit] = useState(false);
   if (!s) {
     return (
-      <Screen back title="مادة">
+      <Screen back="المذاكرة" title="مادة">
         <Empty text="المادة دي اتحذفت." mood="sad" />
       </Screen>
     );
   }
+  const pct = units.length ? Math.round((units.filter((u) => u.status === 'done').length / units.length) * 100) : 0;
+  const weekMins = sessions.filter((x) => String(x.started_at).slice(0, 10) >= weekStart()).reduce((a, x) => a + x.minutes, 0);
+  const lastExam = exams[exams.length - 1];
+  const examIn = s.exam_date ? diffDays(s.exam_date, today()) : null;
   return (
     <Screen
-      back
-      title={s.name}
-      right={
-        <Row gap={2}>
-          <IconBtn name="create-outline" onPress={() => setEdit(true)} />
-          <IconBtn
-            name="trash-outline"
-            onPress={() =>
-              confirm('تحذف المادة؟ هيتحذف معاها الأجزاء والبطاقات والواجبات ومهامها من الجدول.', () => {
-                remove('subjects', s.id, [
-                  ['subject_units', 'subject_id'],
-                  ['flashcards', 'subject_id'],
-                  ['exam_results', 'subject_id'],
-                  ['mistakes', 'subject_id'],
-                  ['notes', 'subject_id'],
-                  ['study_assignments', 'subject_id'],
-                  ['study_schedule_items', 'subject_id'],
-                  ['study_sessions', 'subject_id'],
-                ]);
-                router.back();
-              })
-            }
-          />
-        </Row>
+      back="المذاكرة"
+      backColor={c.acc.study.fg}
+      footer={
+        <View style={{ position: 'absolute', bottom: 24, left: 20, right: 20 }}>
+          <Pressable
+            onPress={() => router.push({ pathname: '/focus', params: { subject: s.id, start: '1' } })}
+            style={{ minHeight: 52, borderRadius: 16, backgroundColor: s.color, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: s.color, shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6 }}
+          >
+            <Ionicons name="play" size={18} color="#FFFFFF" />
+            <T size={15} w="bold" color="#FFFFFF">
+              ابدأ جلسة {s.name}
+            </T>
+          </Pressable>
+        </View>
       }
     >
-      <Btn title="ابدأ جلسة لهذه المادة" icon="timer-outline" onPress={() => router.push({ pathname: '/focus', params: { subject: s.id } })} />
-      <Segmented
+      <View style={{ gap: 10 }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Row gap={10} style={{ flex: 1 }}>
+            <View style={{ width: 14, height: 14, borderRadius: 5, backgroundColor: s.color }} />
+            <T size={26} w="bold" lh={1.3} style={{ flexShrink: 1 }}>
+              {s.name}
+            </T>
+          </Row>
+          <Pressable onPress={() => setEdit(true)} style={{ backgroundColor: c.card, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12 }}>
+            <T size={12} sub>
+              {examIn !== null && examIn >= 0 ? `الاختبار بعد ${examIn} يوم` : 'الاختبار: حدّد الموعد'}
+            </T>
+          </Pressable>
+        </Row>
+        <Row gap={8}>
+          <MiniStat label="الإنجاز" value={`${pct}%`} />
+          <MiniStat label="هذا الأسبوع" value={`${Math.round((weekMins / 60) * 10) / 10}${s.weekly_hours ? ` / ${s.weekly_hours}` : ''} س`} />
+          <MiniStat label="آخر اختبار" value={lastExam ? `${Math.round((lastExam.score / lastExam.max_score) * 100)}%` : '—'} />
+        </Row>
+      </View>
+      <PillTabs
         value={tab}
         onChange={setTab}
         options={[
           { label: 'الأجزاء', value: 'units' },
-          { label: 'البطاقات', value: 'cards' },
+          { label: `البطاقات · ${cardsCount}`, value: 'cards' },
           { label: 'الاختبارات', value: 'exams' },
-          { label: 'الأخطاء', value: 'mistakes' },
+          { label: `الأخطاء · ${mistakesCount}`, value: 'mistakes' },
           { label: 'ملاحظات', value: 'notes' },
         ]}
       />
-      {tab === 'units' && <Units subjectId={s.id} color={s.color} />}
+      {tab === 'units' && <Units subjectId={s.id} />}
       {tab === 'cards' && <Cards subjectId={s.id} />}
       {tab === 'exams' && <Exams subjectId={s.id} />}
       {tab === 'mistakes' && <Mistakes subjectId={s.id} />}
       {tab === 'notes' && <Notes subjectId={s.id} />}
       <Sheet visible={edit} onClose={() => setEdit(false)} title="تعديل المادة">
         <SubjectEditor subject={s} onDone={() => setEdit(false)} />
+        <Btn
+          kind="danger"
+          title="حذف المادة"
+          onPress={() =>
+            confirm('تحذف المادة؟ هيتحذف معاها الأجزاء والبطاقات والواجبات ومهامها من الجدول.', () => {
+              remove('subjects', s.id, [
+                ['subject_units', 'subject_id'],
+                ['flashcards', 'subject_id'],
+                ['exam_results', 'subject_id'],
+                ['mistakes', 'subject_id'],
+                ['notes', 'subject_id'],
+                ['study_assignments', 'subject_id'],
+                ['study_schedule_items', 'subject_id'],
+                ['study_sessions', 'subject_id'],
+              ]);
+              setEdit(false);
+              router.back();
+            })
+          }
+        />
       </Sheet>
     </Screen>
   );
 }
 
-function Units({ subjectId, color }: { subjectId: string; color: string }) {
+function MiniStat({ label, value }: { label: string; value: string }) {
+  const { c } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: c.card, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 }}>
+      <T size={11} sub>
+        {label}
+      </T>
+      <T size={18} w="bold">
+        {value}
+      </T>
+    </View>
+  );
+}
+
+function Units({ subjectId }: { subjectId: string }) {
   const { c } = useTheme();
   const units = useQuery('subject_units', (u) => u.subject_id === subjectId, (a, b) => a.sort_order - b.sort_order, [subjectId]);
   const [title, setTitle] = useState('');
   const [open, setOpen] = useState<string | null>(null);
-  const done = units.filter((u) => u.status === 'done').length;
   const add = () => title.trim() && (insert('subject_units', { subject_id: subjectId, title: title.trim(), sort_order: units.length }), setTitle(''));
   return (
     <>
-      <Card>
-        <Row>
-          <T w="bold" style={{ flex: 1 }}>
-            نسبة الإنجاز
-          </T>
-          <T w="bold">{units.length ? Math.round((done / units.length) * 100) : 0}%</T>
-        </Row>
-        <Bar value={units.length ? done / units.length : 0} color={color} />
-      </Card>
       <Row>
         <View style={{ flex: 1 }}>
           <Field placeholder="جزء جديد (فصل / مهارة / درس)" value={title} onChangeText={setTitle} onSubmitEditing={add} />
@@ -108,28 +152,40 @@ function Units({ subjectId, color }: { subjectId: string; color: string }) {
         <Btn small title="أضف" onPress={add} />
       </Row>
       {units.length === 0 && <Empty text="قسّم المادة لأجزاء." mood="calm" />}
-      {units.map((u) => (
-        <Card key={u.id} onPress={() => setOpen(open === u.id ? null : u.id)} style={{ gap: 8 }}>
-          <Row>
-            <T w="medium" style={{ flex: 1 }} strike={u.status === 'done'}>
-              {u.title}
-            </T>
-            <Pill text={unitStatus.find((x) => x.value === u.status)?.label ?? ''} color={u.status === 'done' ? c.onInk : u.status === 'needs_review' ? c.danger : c.primary} bg={u.status === 'done' ? c.ink : undefined} />
-          </Row>
-          {open === u.id && (
-            <>
-              <Chips value={u.status} onChange={(v: string) => setUnitStatus(u, v)} options={unitStatus} />
-              <T size={11} faint>
-                لما تخلّص جزء، بتتجدول مراجعات بعد 1 و3 و7 و30 يوم وتظهر في مهام اليوم.
-              </T>
-              <Row>
-                <Btn small kind="ghost" title="ابدأ جلسة" icon="timer-outline" onPress={() => router.push({ pathname: '/focus', params: { subject: subjectId, unit: u.id } })} />
-                <Btn small kind="danger" title="حذف" onPress={() => confirm('تحذف الجزء ده؟', () => remove('subject_units', u.id, [['reviews', 'unit_id']]))} />
-              </Row>
-            </>
-          )}
-        </Card>
-      ))}
+      {units.length > 0 && (
+        <View style={{ backgroundColor: c.card, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 2 }}>
+          {units.map((u, i) => {
+            const st = unitStatus.find((x) => x.value === u.status) ?? unitStatus[0];
+            const a = c.acc[st.acc];
+            return (
+              <View key={u.id}>
+                <ListRow minHeight={50} last={i === units.length - 1 && open !== u.id} onPress={() => setOpen(open === u.id ? null : u.id)}>
+                  <T size={14} w="medium" style={{ flex: 1 }}>
+                    {u.title}
+                  </T>
+                  <View style={{ borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, backgroundColor: a.bg }}>
+                    <T size={11} w="semibold" color={a.dark}>
+                      {st.label}
+                    </T>
+                  </View>
+                </ListRow>
+                {open === u.id && (
+                  <View style={{ gap: 8, paddingBottom: 12 }}>
+                    <Chips value={u.status} onChange={(v: string) => setUnitStatus(u, v)} options={unitStatus} />
+                    <T size={11} faint>
+                      لما تخلّص جزء، بتتجدول مراجعات بعد 1 و3 و7 و30 يوم وتظهر في مهام اليوم.
+                    </T>
+                    <Row>
+                      <Btn small kind="ghost" title="ابدأ جلسة" icon="timer-outline" onPress={() => router.push({ pathname: '/focus', params: { subject: subjectId, unit: u.id } })} />
+                      <Btn small kind="danger" title="حذف" onPress={() => confirm('تحذف الجزء ده؟', () => remove('subject_units', u.id, [['reviews', 'unit_id']]))} />
+                    </Row>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
     </>
   );
 }

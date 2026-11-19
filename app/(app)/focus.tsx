@@ -14,7 +14,8 @@ type Saved = { focus: number; brk: number; phase: 'idle' | 'focus' | 'break'; en
 /** S-03: Pomodoro with custom durations. The session is logged to the subject/unit. Survives closing the app. */
 export default function Focus() {
   const { c } = useTheme();
-  const params = useLocalSearchParams<{ subject?: string; unit?: string }>();
+  const params = useLocalSearchParams<{ subject?: string; unit?: string; start?: string }>();
+  const autoStarted = useRef(false);
   const subjects = useQuery('subjects', (s) => !s.archived);
   const [st, setSt] = useState<Saved>({ focus: 25, brk: 5, phase: 'idle', endsAt: null, startedAt: null, subject: params.subject ?? null, unit: params.unit ?? null, notifId: null });
   const [now, setNow] = useState(Date.now());
@@ -37,6 +38,15 @@ export default function Focus() {
   useEffect(() => {
     if (loaded.current) AsyncStorage.setItem(KEY, JSON.stringify(st)).catch(() => {});
   }, [st]);
+
+  // opened from the study tab's "ابدأ" → start right away
+  useEffect(() => {
+    if (params.start === '1' && !autoStarted.current && loaded.current && st.phase === 'idle') {
+      autoStarted.current = true;
+      start();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now]);
 
   // phase finished?
   useEffect(() => {
@@ -81,7 +91,7 @@ export default function Focus() {
   const subject = subjects.find((s) => s.id === st.subject);
 
   return (
-    <Screen back title="جلسة تركيز">
+    <Screen back="المذاكرة" backColor={c.acc.study.fg} title="جلسة تركيز">
       <View style={{ alignItems: 'center', paddingVertical: 12 }}>
         <Ring value={running ? 1 - left / total : 0} size={220} stroke={10} color={st.phase === 'break' ? c.primary : c.ink}>
           <T size={46} w="bold">

@@ -1,38 +1,69 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
-import { Bar, Btn, Card, Chips, confirm, Empty, Field, IconBtn, Row, Screen, Segmented, Sheet, T } from '@/components/ui';
+import { Pressable, View } from 'react-native';
+import { art } from '@/components/mee';
+import { Bar, Btn, Card, Chips, confirm, Empty, Field, IconBtn, Row, Screen, Sheet, T } from '@/components/ui';
 import { cleanYmd } from '@/lib/dates';
 import { insert, remove, rows, update, uuid, useQuery, useRows, type Row as DbRow } from '@/lib/db';
+import { useTheme } from '@/lib/theme';
 
 /** Q-01, Q-07: create and manage memorization tables. Starts empty. */
 export default function QuranTables() {
+  const { c } = useTheme();
+  const gold = c.acc.worship;
   const [view, setView] = useState<'active' | 'archived'>('active');
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<DbRow | null>(null);
   const [newName, setNewName] = useState('');
+  const all = useRows('quran_tables');
   const tables = useQuery('quran_tables', (t) => (view === 'archived' ? t.archived : !t.archived), (a, b) => String(b.created_at).localeCompare(String(a.created_at)), [view]);
   const cells = useRows('quran_cells');
+  const activeCount = all.filter((t) => !t.archived).length;
 
   return (
-    <Screen back title="جدول حفظ القرآن">
-      <Segmented value={view} onChange={setView} options={[{ label: 'الجداول', value: 'active' }, { label: 'الأرشيف', value: 'archived' }]} />
-      {view === 'active' && <Btn title="جدول جديد" icon="add" onPress={() => setCreating(true)} />}
+    <Screen back="العبادات" backColor={gold.fg} title="جدول حفظ القرآن" subtitle="ابنِ جدولك بنفسك: الأيام، والأعمدة، وإيه اللي هتحفظه في كل خانة.">
+      <Btn title="جدول جديد" icon="add" onPress={() => setCreating(true)} style={{ minHeight: 54, borderRadius: 18 }} />
+      <View style={{ flexDirection: 'row', backgroundColor: c.seg, borderRadius: 14, padding: 4 }}>
+        {(
+          [
+            ['active', `الجداول · ${activeCount}`],
+            ['archived', `المؤرشفة · ${all.length - activeCount}`],
+          ] as const
+        ).map(([v, label]) => (
+          <Pressable key={v} onPress={() => setView(v)} style={{ flex: 1, minHeight: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: view === v ? c.card : 'transparent' }}>
+            <T size={13} w="semibold">
+              {label}
+            </T>
+          </Pressable>
+        ))}
+      </View>
       {tables.length === 0 && (
-        <Card>
-          <Empty text={view === 'active' ? 'الجدول بيبدأ فاضي — اعمل أول جدول وابنيه بنفسك.' : 'الأرشيف فاضي.'} mood="calm" />
+        <Card style={{ paddingVertical: 26, borderRadius: 22 }}>
+          <Empty image={art.worship} title={view === 'active' ? 'لسه مفيش جداول' : 'الأرشيف فاضي'} text={view === 'active' ? 'اعمل جدولك الأول وحدّد أيامك وأعمدتك واللي هتحفظه بنفسك.' : 'الجداول اللي بتأرشفها بتظهر هنا.'} />
         </Card>
       )}
       {tables.map((t) => {
-        const tc = cells.filter((c) => c.table_id === t.id);
-        const done = tc.filter((c) => c.status === 'done').length;
-        const doing = tc.filter((c) => c.status === 'doing').length;
+        const tc = cells.filter((x) => x.table_id === t.id);
+        const done = tc.filter((x) => x.status === 'done').length;
+        const doing = tc.filter((x) => x.status === 'doing').length;
         return (
-          <Card key={t.id} onPress={() => router.push({ pathname: '/quran-tables/[id]', params: { id: t.id } })}>
+          <Card key={t.id} onPress={() => router.push({ pathname: '/quran-tables/[id]', params: { id: t.id } })} style={{ borderRadius: 22 }}>
             <Row>
-              <T w="bold" style={{ flex: 1 }}>
-                {t.name}
-              </T>
+              <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: gold.bg, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="grid-outline" size={20} color={gold.fg} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <T size={16} w="bold">
+                  {t.name}
+                </T>
+                <T size={12} sub>
+                  {tc.length ? `${Math.round((done / tc.length) * 100)}% · ${done} من ${tc.length} خانة · ${doing} جاري` : 'لسه مفيش خانات'}
+                </T>
+              </View>
+            </Row>
+            <Bar value={tc.length ? done / tc.length : 0} color={gold.bar} />
+            <Row gap={4} style={{ justifyContent: 'flex-end' }}>
               <IconBtn name="create-outline" size={18} onPress={() => (setRenaming(t), setNewName(t.name))} />
               <IconBtn name="copy-outline" size={18} onPress={() => duplicate(t)} />
               <IconBtn name={t.archived ? 'arrow-undo-outline' : 'archive-outline'} size={18} onPress={() => update('quran_tables', t.id, { archived: !t.archived })} />
@@ -50,10 +81,6 @@ export default function QuranTables() {
                 }
               />
             </Row>
-            <Bar value={tc.length ? done / tc.length : 0} />
-            <T size={12} sub>
-              {tc.length ? `${Math.round((done / tc.length) * 100)}% · ${done}/${tc.length} خانة · ${doing} جاري` : 'لسه مفيش خانات'}
-            </T>
           </Card>
         );
       })}

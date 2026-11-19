@@ -2,34 +2,34 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { Btn, Card, Field, Row, Screen, SectionTitle, Stat, T, tap } from '@/components/ui';
+import { Btn, Card, Check, Field, ListRow, Row, Screen, Section, T, tap } from '@/components/ui';
 import { bumpHabit } from '@/lib/actions';
 import { timeLabel, today } from '@/lib/dates';
 import { insert, remove, rows, update, upsertOwn, useNow, useOwn, useQuery, useRows } from '@/lib/db';
 import { streak } from '@/lib/logic';
-import { nextPrayer, prayerName, prayerTimes, PRAYERS, useCoords, type Prayer } from '@/lib/prayer';
+import { prayerName, prayerTimes, PRAYERS, useCoords, type Prayer } from '@/lib/prayer';
 import { useTheme } from '@/lib/theme';
 
 const statusCycle = { none: 'on_time', on_time: 'late', late: 'missed', missed: 'none' } as const;
-const statusLabel: Record<string, string> = { on_time: 'في وقتها', late: 'متأخرة', missed: 'لم تُسجّل', none: '—' };
+const statusLabel: Record<string, string> = { on_time: 'في وقتها', late: 'متأخرة', missed: 'فاتت', none: 'لم تُسجّل' };
 
 export default function Worship() {
   const { c } = useTheme();
+  const gold = c.acc.worship;
   const d = today();
   const now = useNow();
   const coords = useCoords();
   const profile = useOwn('profiles');
   const method = profile?.prayer_method ?? 'umm_al_qura';
   const times = prayerTimes(coords, d, method);
-  const np = nextPrayer(coords, now, method);
   const logs = useRows('prayer_logs');
   const todayLogs = logs.filter((l) => l.date === d);
 
-  // W-02: streak of days where all five were prayed (on time or late)
+  // W-02: days with all five prayed
   const byDate = new Map<string, number>();
   for (const l of logs) if (l.status !== 'missed') byDate.set(l.date, (byDate.get(l.date) ?? 0) + 1);
-  const fullDays = Array.from(byDate).filter(([, n]) => n >= 5).map(([x]) => x);
-  const s = streak(fullDays);
+  const s = streak(Array.from(byDate).filter(([, n]) => n >= 5).map(([x]) => x));
+  const prayedToday = todayLogs.filter((l) => l.status === 'on_time' || l.status === 'late').length;
 
   function cycle(p: Prayer) {
     tap();
@@ -44,19 +44,21 @@ export default function Worship() {
   const quran = useQuery('quran_logs', (q) => q.date === d, undefined, [d])[0];
   const lastPos = useQuery('quran_logs', (q) => !!q.last_position, (a, b) => b.date.localeCompare(a.date))[0]?.last_position;
   const goal = Number(profile?.quran_daily_pages ?? 0);
-  const [pages, setPages] = useState('');
-  const [pos, setPos] = useState('');
+  const read = Number(quran?.pages_read ?? 0);
   const [goalInput, setGoalInput] = useState('');
-  const wirdDays = useQuery('quran_logs', (q) => goal > 0 && q.pages_read >= goal).map((q) => q.date);
-  const ws = streak(wirdDays);
-
-  function addPages(n: number) {
-    if (!n) return;
-    if (quran) update('quran_logs', quran.id, { pages_read: Number(quran.pages_read) + n, last_position: pos.trim() || quran.last_position });
-    else insert('quran_logs', { date: d, pages_read: n, last_position: pos.trim() || lastPos || null });
-    setPages('');
+  const [pos, setPos] = useState('');
+  const [editPos, setEditPos] = useState(false);
+  const addPages = (n: number) => {
+    if (quran) update('quran_logs', quran.id, { pages_read: Math.max(0, read + n) });
+    else if (n > 0) insert('quran_logs', { date: d, pages_read: n, last_position: lastPos ?? null });
+  };
+  const savePos = () => {
+    if (!pos.trim()) return setEditPos(false);
+    if (quran) update('quran_logs', quran.id, { last_position: pos.trim() });
+    else insert('quran_logs', { date: d, pages_read: 0, last_position: pos.trim() });
     setPos('');
-  }
+    setEditPos(false);
+  };
 
   // W-05 adhkar as ready-made habits
   const habits = useRows('habits');
@@ -64,117 +66,134 @@ export default function Worship() {
   const adhkar = habits.filter((h) => h.name === 'أذكار الصباح' || h.name === 'أذكار المساء');
 
   return (
-    <Screen back title="العبادات">
-      <Card tint={c.sec.worship}>
-        <Row>
-          <View style={{ flex: 1 }}>
-            <T size={13} sub>
-              {coords.city ?? 'موقعك'} · أم القرى
-            </T>
-            <T size={18} w="bold">
-              {prayerName[np.prayer]} {timeLabel(np.at)}
-            </T>
-          </View>
-          <Stat label="سلسلة الخمس" value={`🔥 ${s.current}`} />
-        </Row>
-      </Card>
+    <Screen
+      back="اليوم"
+      backColor={gold.fg}
+      title="العبادات"
+      subtitle={`${coords.city ?? 'موقعك'} · ${method === 'umm_al_qura' ? 'أم القرى' : 'طريقة مخصصة'}`}
+      right={
+        <View style={{ backgroundColor: gold.bg, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, alignItems: 'center' }}>
+          <T size={18} w="bold" color={gold.fg} lh={1.2}>
+            {s.current}
+          </T>
+          <T size={11} w="medium" color={gold.fg}>
+            يوم كامل
+          </T>
+        </View>
+      }
+    >
+      <Section title="صلوات اليوم" note={`${prayedToday} من 5`}>
+        <Card list>
+          {PRAYERS.map((p, i) => {
+            const st = todayLogs.find((l) => l.prayer === p)?.status ?? 'none';
+            const done = st === 'on_time' || st === 'late';
+            const isNext = !done && times[p] > now && PRAYERS.filter((x) => times[x] > now)[0] === p;
+            return (
+              <ListRow key={p} minHeight={60} last={i === PRAYERS.length - 1}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: done ? c.primary : isNext ? gold.bar : c.track }} />
+                <View style={{ flex: 1 }}>
+                  <T size={16} w="semibold">
+                    {prayerName[p]}
+                  </T>
+                  <T size={12} sub>
+                    {timeLabel(times[p])}
+                  </T>
+                </View>
+                <Pressable
+                  onPress={() => cycle(p)}
+                  style={{
+                    minHeight: 36,
+                    paddingHorizontal: 14,
+                    borderRadius: 999,
+                    justifyContent: 'center',
+                    borderWidth: 1,
+                    borderColor: st === 'on_time' ? c.primary : st === 'late' ? gold.bar : st === 'missed' ? c.danger : c.track,
+                    backgroundColor: st === 'on_time' ? c.primary : st === 'late' ? gold.bg : c.card,
+                  }}
+                >
+                  <T size={13} w="semibold" color={st === 'on_time' ? '#FFFFFF' : st === 'late' ? gold.fg : st === 'missed' ? c.danger : c.sub2}>
+                    {statusLabel[st]}
+                  </T>
+                </Pressable>
+              </ListRow>
+            );
+          })}
+        </Card>
+      </Section>
 
-      <SectionTitle>صلوات اليوم</SectionTitle>
-      <Card style={{ gap: 0 }}>
-        {PRAYERS.map((p) => {
-          const st = todayLogs.find((l) => l.prayer === p)?.status ?? 'none';
-          const past = times[p] <= now;
-          return (
-            <Pressable key={p} onPress={() => cycle(p)} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 }}>
-              <View
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: st === 'on_time' ? c.ink : st === 'late' ? c.primarySoft : 'transparent',
-                  borderWidth: st === 'none' || st === 'missed' ? 1.5 : 0,
-                  borderColor: st === 'missed' ? c.danger : c.faint,
-                }}
-              >
-                {st === 'on_time' && <Ionicons name="checkmark" size={16} color={c.onInk} />}
-                {st === 'late' && <Ionicons name="time-outline" size={15} color={c.primary} />}
-                {st === 'missed' && <Ionicons name="close" size={15} color={c.danger} />}
-              </View>
-              <T w="semibold" style={{ flex: 1 }}>
-                {prayerName[p]}
-              </T>
-              <T size={13} sub>
-                {statusLabel[st]}
-              </T>
-              <T size={13} w="medium" color={past ? c.faint : c.text}>
-                {timeLabel(times[p])}
+      <Card style={{ padding: 18, gap: 14 }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <T size={18} w="bold">
+            ورد القرآن
+          </T>
+          {goal > 0 && (
+            <Pressable onPress={() => upsertOwn('profiles', { quran_daily_pages: null })} style={{ backgroundColor: gold.bg, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 }}>
+              <T size={12} w="semibold" color={gold.fg}>
+                الهدف {goal} صفحات
               </T>
             </Pressable>
-          );
-        })}
-        <T size={11} faint>
-          اضغط على الصلاة: في وقتها ← متأخرة ← لم تُسجّل
-        </T>
-      </Card>
-
-      <SectionTitle>ورد القرآن</SectionTitle>
-      <Card>
+          )}
+        </Row>
         {goal > 0 ? (
-          <Row>
-            <View style={{ flex: 1 }}>
-              <T w="bold" size={18}>
-                {Number(quran?.pages_read ?? 0)} / {goal} صفحة
+          <>
+            <Row gap={6} style={{ alignItems: 'baseline' }}>
+              <T size={34} w="bold" lh={1.2}>
+                {read}
               </T>
-              <T size={12} sub>
-                آخر موضع: {quran?.last_position ?? lastPos ?? '—'} · 🔥 {ws.current} يوم
+              <T size={14} sub>
+                / {goal} صفحات اليوم
               </T>
+            </Row>
+            <View style={{ height: 10, borderRadius: 999, backgroundColor: c.line, overflow: 'hidden' }}>
+              <View style={{ height: 10, borderRadius: 999, backgroundColor: gold.bar, width: `${Math.min(100, (read / goal) * 100)}%` }} />
             </View>
-            <Btn small kind="soft" title="+1" onPress={() => addPages(1)} />
-            <Btn small kind="soft" title="+5" onPress={() => addPages(5)} />
-          </Row>
+          </>
         ) : (
           <Row>
             <View style={{ flex: 1 }}>
-              <Field placeholder="هدفك اليومي بالصفحات (مثلاً 4)" keyboardType="decimal-pad" value={goalInput} onChangeText={setGoalInput} />
+              <Field placeholder="هدفك اليومي بالصفحات (مثلاً 10)" keyboardType="decimal-pad" value={goalInput} onChangeText={setGoalInput} />
             </View>
             <Btn small title="حفظ" onPress={() => Number(goalInput) > 0 && upsertOwn('profiles', { quran_daily_pages: Number(goalInput) })} />
           </Row>
         )}
-        <Row>
-          <View style={{ flex: 1 }}>
-            <Field placeholder="صفحات" keyboardType="decimal-pad" value={pages} onChangeText={setPages} />
-          </View>
-          <View style={{ flex: 2 }}>
-            <Field placeholder="وصلت فين؟ (سورة/صفحة)" value={pos} onChangeText={setPos} />
-          </View>
-          <Btn small title="سجّل" onPress={() => addPages(Number(pages) || 0)} />
-        </Row>
-        {goal > 0 && (
-          <T size={12} faint onPress={() => upsertOwn('profiles', { quran_daily_pages: null })}>
-            تغيير الهدف
-          </T>
+        {editPos ? (
+          <Row>
+            <View style={{ flex: 1 }}>
+              <Field autoFocus placeholder="سورة الكهف · صفحة 296" value={pos} onChangeText={setPos} onSubmitEditing={savePos} />
+            </View>
+            <Btn small title="حفظ" onPress={savePos} />
+          </Row>
+        ) : (
+          <Row gap={12}>
+            <T size={13} sub style={{ flex: 1 }} onPress={() => setEditPos(true)}>
+              آخر موضع: {quran?.last_position ?? lastPos ?? 'اضغط وحدّد'}
+            </T>
+            {read > 0 && <Btn small kind="ghost" title="−" onPress={() => addPages(-1)} />}
+            <Btn small title="+ صفحة" onPress={() => addPages(1)} />
+          </Row>
         )}
       </Card>
 
-      <Card onPress={() => router.push('/quran-tables')} style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Ionicons name="grid-outline" size={24} color={c.text} />
-        <View style={{ flex: 1 }}>
-          <T w="semibold">جدول حفظ القرآن</T>
+      <Card onPress={() => router.push('/quran-tables')} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: gold.bg, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="grid-outline" size={24} color={gold.fg} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <T size={16} w="bold">
+            جدول حفظ القرآن
+          </T>
           <T size={12} sub>
-            ابنِ جدول الحفظ بنفسك: أيام، أعمدة، خانات
+            ابنِ جدول حفظك بنفسك وتابع إنجازك
           </T>
         </View>
         <Ionicons name="chevron-back" size={18} color={c.faint} />
       </Card>
 
-      <SectionTitle>الأذكار</SectionTitle>
       {adhkar.length === 0 ? (
         <Btn
-          kind="soft"
+          kind="ghost"
           icon="sparkles-outline"
-          title="أضف أذكار الصباح والمساء كعادات"
+          title="أضف أذكار الصباح والمساء"
           onPress={() => {
             insert('habits', { name: 'أذكار الصباح', icon: 'sunny', sort_order: rows('habits').length });
             insert('habits', { name: 'أذكار المساء', icon: 'moon', sort_order: rows('habits').length + 1 });
@@ -185,12 +204,10 @@ export default function Worship() {
           {adhkar.map((h) => {
             const done = habitLogs.some((l) => l.habit_id === h.id && l.date === d);
             return (
-              <Card key={h.id} onPress={() => bumpHabit(h)} tint={done ? c.ink : c.card} style={{ flex: 1, alignItems: 'center' }}>
-                <Ionicons name={h.icon} size={22} color={done ? c.onInk : c.text} />
-                <T w="semibold" color={done ? c.onInk : c.text}>
-                  {h.name}
-                </T>
-              </Card>
+              <Pressable key={h.id} onPress={() => bumpHabit(h)} style={{ flex: 1, backgroundColor: c.card, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <T w="medium">{h.name}</T>
+                <Check on={done} onPress={() => bumpHabit(h)} />
+              </Pressable>
             );
           })}
         </Row>

@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
-import { Bar, Btn, Card, Chips, confirm, Empty, Field, IconBtn, Row, Screen, Sheet, T, tap } from '@/components/ui';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Btn, Card, Chips, confirm, Empty, Field, Ring, Row, Screen, Sheet, T, tap } from '@/components/ui';
 import { cleanYmd, shortLabel } from '@/lib/dates';
 import { get, insert, remove, update, useQuery, useRows, type Row as DbRow } from '@/lib/db';
 import { useTheme } from '@/lib/theme';
@@ -21,7 +21,7 @@ const nextStatus: Record<string, string> = { none: 'doing', doing: 'done', done:
 export default function QuranTable() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { c } = useTheme();
-  const { width } = useWindowDimensions();
+
   useRows('quran_tables');
   const table = get('quran_tables', id);
   const cols = useQuery('quran_columns', (x) => x.table_id === id, (a, b) => a.sort_order - b.sort_order, [id]);
@@ -33,134 +33,169 @@ export default function QuranTable() {
 
   if (!table) {
     return (
-      <Screen back title="جدول">
+      <Screen back="الجداول" backColor={c.acc.worship.fg} title="جدول">
         <Empty text="الجدول ده اتحذف." mood="sad" />
       </Screen>
     );
   }
   const done = cells.filter((x) => x.status === 'done').length;
   const doing = cells.filter((x) => x.status === 'doing').length;
-  const DAY_W = 112;
-  const colW = Math.max(130, cols.length ? (width - 36 - DAY_W) / Math.min(cols.length, 3) : 130);
+  const gold = c.acc.worship;
+  const DAY_W = 116;
+  const COL_W = 140;
   const cellAt = (r: string, col: string) => cells.find((x) => x.row_id === r && x.column_id === col);
+  const fillAll = () => {
+    for (const r of days) for (const col of cols) if (!cellAt(r.id, col.id)) insert('quran_cells', { table_id: id, row_id: r.id, column_id: col.id, kind: 'free', status: 'none' });
+  };
+  const pct = cells.length ? done / cells.length : 0;
 
   return (
-    <Screen back title={table.name} right={<IconBtn name="add-circle-outline" onPress={() => setColSheet('new')} />}>
-      <Card>
-        <Row>
-          <T w="bold" size={18} style={{ flex: 1 }}>
-            {cells.length ? Math.round((done / cells.length) * 100) : 0}%
-          </T>
-          <T size={12} sub>
-            {done}/{cells.length} تم · {doing} جاري
-          </T>
+    <Screen back="الجداول" backColor={gold.fg} title={table.name} padded={false}>
+      <View style={{ paddingHorizontal: 18, gap: 14 }}>
+        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 16, borderRadius: 22 }}>
+          <Ring value={pct} size={64} stroke={6} color={c.primaryDark}>
+            <T size={14} w="bold">
+              {Math.round(pct * 100)}%
+            </T>
+          </Ring>
+          <View style={{ flex: 1, gap: 4 }}>
+            <T size={14} w="bold">
+              نسبة الإنجاز
+            </T>
+            <T size={12} sub lh={1.6}>
+              {done} من {cells.length} خانة مكتملة · {doing} جاري
+            </T>
+          </View>
+        </Card>
+        <Row gap={8}>
+          <GridBtn label="+ عمود" onPress={() => setColSheet('new')} />
+          <GridBtn label="+ صف" onPress={() => setRowSheet('new')} />
+          <GridBtn label="خانات للكل" onPress={fillAll} />
         </Row>
-        <Bar value={cells.length ? done / cells.length : 0} />
-      </Card>
+      </View>
 
       {cols.length === 0 && days.length === 0 ? (
-        <Card>
-          <Empty text="ضيف أعمدة وأيام وابدأ تبني جدولك." mood="calm" />
-        </Card>
+        <View style={{ paddingHorizontal: 18 }}>
+          <Card>
+            <Empty text="ضيف أعمدة وأيام وابدأ تبني جدولك." mood="calm" />
+          </Card>
+        </View>
       ) : (
-        <View style={{ flexDirection: 'row' }}>
-          {/* fixed day column */}
-          <View style={{ width: DAY_W }}>
-            <View style={{ height: 44, justifyContent: 'center' }}>
-              <T size={12} sub w="semibold">
-                اليوم
-              </T>
-            </View>
-            {days.map((r) => {
-              const rc = cells.filter((x) => x.row_id === r.id);
-              const rd = rc.filter((x) => x.status === 'done').length;
-              return (
-                <Pressable key={r.id} onPress={() => setRowSheet(r)} style={{ height: 92, justifyContent: 'center', paddingLeft: 6, borderTopWidth: 1, borderColor: c.line }}>
-                  <Row gap={4}>
-                    <T w="semibold" lines={1} style={{ flexShrink: 1 }}>
-                      {r.name}
-                    </T>
-                    {r.note ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} /> : null}
-                  </Row>
-                  {r.date ? (
-                    <T size={11} sub>
-                      {shortLabel(r.date)}
-                    </T>
-                  ) : null}
-                  <T size={11} faint>
-                    {rc.length ? `${Math.round((rd / rc.length) * 100)}%` : '—'}
-                    {rc.some((x) => x.status === 'doing') ? ` · ${rc.filter((x) => x.status === 'doing').length} جاري` : ''}
-                  </T>
-                </Pressable>
-              );
-            })}
-          </View>
-          {/* scrollable columns */}
-          <ScrollView horizontal showsHorizontalScrollIndicator style={{ flex: 1 }}>
-            <View>
-              <View style={{ flexDirection: 'row', height: 44 }}>
-                {cols.map((col) => (
-                  <Pressable key={col.id} onPress={() => setColSheet(col)} style={{ width: colW, justifyContent: 'center', paddingHorizontal: 8 }}>
-                    <T size={13} w="semibold" lines={1}>
-                      {col.name}
+        <View style={{ gap: 6 }}>
+          <T size={11} color="#8A8A85" style={{ paddingHorizontal: 18 }}>
+            اسحب الجدول يمين وشمال عشان تشوف كل الأعمدة
+          </T>
+          <View style={{ flexDirection: 'row', paddingRight: 18 }}>
+            {/* sticky day column */}
+            <View style={{ width: DAY_W, gap: 8, zIndex: 2 }}>
+              <View style={{ minHeight: 44, borderRadius: 14, backgroundColor: c.bg, justifyContent: 'center', paddingHorizontal: 6 }}>
+                <T size={12} w="semibold" sub>
+                  اليوم / الصف
+                </T>
+              </View>
+              {days.map((r) => {
+                const rc = cells.filter((x) => x.row_id === r.id);
+                const rd = rc.filter((x) => x.status === 'done').length;
+                return (
+                  <Pressable
+                    key={r.id}
+                    onPress={() => setRowSheet(r)}
+                    style={{ height: 92, borderRadius: 16, backgroundColor: gold.bg, padding: 10, gap: 4, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: -6, height: 0 }, elevation: 1 }}
+                  >
+                    <Row gap={4}>
+                      <T size={14} w="bold" lh={1.3} lines={1} style={{ flexShrink: 1 }}>
+                        {r.name}
+                      </T>
+                      {r.note ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: gold.fg }} /> : null}
+                    </Row>
+                    {r.date ? (
+                      <T size={11} color={gold.fg}>
+                        {shortLabel(r.date)}
+                      </T>
+                    ) : null}
+                    <T size={11} w="semibold" color={gold.fg}>
+                      {rc.length ? `${Math.round((rd / rc.length) * 100)}%` : '—'}
+                      {rc.some((x) => x.status === 'doing') ? ` · ${rc.filter((x) => x.status === 'doing').length} جاري` : ''}
                     </T>
                   </Pressable>
+                );
+              })}
+            </View>
+            {/* columns scroll sideways */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8, paddingLeft: 18 }}>
+              <View style={{ gap: 8 }}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {cols.map((col) => (
+                    <Pressable key={col.id} onPress={() => setColSheet(col)} style={{ width: COL_W, minHeight: 44, borderRadius: 14, backgroundColor: '#1F2421', paddingVertical: 6, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <T size={13} w="bold" color="#FFFFFF" lines={1} style={{ flexShrink: 1 }}>
+                        {col.name}
+                      </T>
+                      <Ionicons name="ellipsis-horizontal" size={14} color="#C9CFC9" />
+                    </Pressable>
+                  ))}
+                </View>
+                {days.map((r) => (
+                  <View key={r.id} style={{ flexDirection: 'row', gap: 8, height: 92 }}>
+                    {cols.map((col) => {
+                      const cell = cellAt(r.id, col.id);
+                      if (!cell)
+                        return (
+                          <Pressable
+                            key={col.id}
+                            onPress={() => insert('quran_cells', { table_id: id, row_id: r.id, column_id: col.id, kind: 'free', status: 'none' })}
+                            style={{ width: COL_W, borderRadius: 16, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#D9D4C7', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <T size={20} color="#A39C8C">
+                              +
+                            </T>
+                          </Pressable>
+                        );
+                      const isDone = cell.status === 'done';
+                      const isDoing = cell.status === 'doing';
+                      return (
+                        <View key={col.id} style={{ width: COL_W, borderRadius: 16, padding: 8, gap: 6, backgroundColor: isDone ? c.doneBg : c.card, borderWidth: 1, borderColor: isDone ? c.doneBorder : isDoing ? gold.bar : c.line }}>
+                          <Pressable
+                            onPress={() => (tap(), update('quran_cells', cell.id, { status: nextStatus[cell.status] }))}
+                            style={{ alignSelf: 'flex-start', minHeight: 28, paddingHorizontal: 9, borderRadius: 999, borderWidth: 1, justifyContent: 'center', borderColor: isDone ? c.primaryDark : isDoing ? gold.bar : c.border, backgroundColor: isDone ? c.primaryDark : isDoing ? gold.bg : c.card }}
+                          >
+                            <T size={11} w="bold" color={isDone ? '#FFFFFF' : isDoing ? gold.fg : c.sub}>
+                              {isDone ? '✓ تم' : isDoing ? '◐ جاري' : '○ لسه'}
+                            </T>
+                          </Pressable>
+                          <Pressable onPress={() => setCellSheet(cell)} style={{ flex: 1, gap: 2 }}>
+                            <T size={10} w="semibold" sub>
+                              {kindLabel[cell.kind]}
+                            </T>
+                            <T size={13} w="semibold" lh={1.4} lines={2} color={cell.text ? c.text : c.faint}>
+                              {cell.text || 'اضغط واكتب…'}
+                            </T>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
                 ))}
               </View>
-              {days.map((r) => (
-                <View key={r.id} style={{ flexDirection: 'row', height: 92, borderTopWidth: 1, borderColor: c.line }}>
-                  {cols.map((col) => {
-                    const cell = cellAt(r.id, col.id);
-                    return (
-                      <View key={col.id} style={{ width: colW, padding: 5 }}>
-                        {cell ? (
-                          <View style={{ flex: 1, borderRadius: 12, backgroundColor: cell.status === 'done' ? c.ink : c.card, padding: 8, gap: 4 }}>
-                            <Pressable
-                              onPress={() => (tap(), update('quran_cells', cell.id, { status: nextStatus[cell.status] }))}
-                              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                            >
-                              <Ionicons
-                                name={cell.status === 'done' ? 'checkmark-circle' : cell.status === 'doing' ? 'ellipse-outline' : 'remove-circle-outline'}
-                                size={16}
-                                color={cell.status === 'done' ? c.onInk : cell.status === 'doing' ? c.primary : c.faint}
-                              />
-                              <T size={11} color={cell.status === 'done' ? c.onInk : c.sub}>
-                                {cell.status === 'done' ? 'تم ✓' : cell.status === 'doing' ? 'جاري' : 'لسه'} · {kindLabel[cell.kind]}
-                              </T>
-                            </Pressable>
-                            <Pressable onPress={() => setCellSheet(cell)} style={{ flex: 1 }}>
-                              <T size={13} lines={2} color={cell.status === 'done' ? c.onInk : c.text}>
-                                {cell.text || 'اضغط واكتب…'}
-                              </T>
-                            </Pressable>
-                          </View>
-                        ) : (
-                          <Pressable
-                            onPress={() => insert('quran_cells', { table_id: id, row_id: r.id, column_id: col.id, kind: 'free', status: 'none' })}
-                            style={{ flex: 1, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: c.line, alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <Ionicons name="add" size={18} color={c.faint} />
-                          </Pressable>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         </View>
       )}
-
-      <Row>
-        <Btn style={{ flex: 1 }} kind="soft" icon="add" title="يوم" onPress={() => setRowSheet('new')} />
-        <Btn style={{ flex: 1 }} kind="soft" icon="add" title="عمود" onPress={() => setColSheet('new')} />
-      </Row>
 
       <CellSheet cell={cellSheet} onClose={() => setCellSheet(null)} />
       <RowSheet row={rowSheet} tableId={id} rows={days} onClose={() => setRowSheet(null)} />
       <ColSheet col={colSheet} tableId={id} cols={cols} onClose={() => setColSheet(null)} />
     </Screen>
+  );
+}
+
+function GridBtn({ label, onPress }: { label: string; onPress: () => void }) {
+  const { c } = useTheme();
+  return (
+    <Pressable onPress={onPress} style={{ flex: 1, minHeight: 44, borderRadius: 14, borderWidth: 1, borderColor: '#E6E3DC', backgroundColor: c.card, alignItems: 'center', justifyContent: 'center' }}>
+      <T size={13} w="bold">
+        {label}
+      </T>
+    </Pressable>
   );
 }
 

@@ -29,10 +29,10 @@ export default function Journal() {
     })();
   }, []);
 
-  if (unlocked === null) return <Screen back title="يومياتي">{null}</Screen>;
+  if (unlocked === null) return <Screen back="me" title="يومياتي">{null}</Screen>;
   if (!unlocked) {
     return (
-      <Screen back title="يومياتي">
+      <Screen back="me" title="يومياتي">
         <Card>
           <Empty text="اليوميات مقفولة." mood="sleep" />
           <Btn title="حاول تاني" onPress={() => router.replace('/journal')} />
@@ -42,7 +42,7 @@ export default function Journal() {
   }
 
   return (
-    <Screen back title="يومياتي">
+    <Screen back="me" title="يومياتي">
       <Btn title="اكتب النهارده" icon="create-outline" onPress={() => router.push('/journal/new')} />
       <Row>
         <Stat label="سلسلة الكتابة" value={`🔥 ${st.current}`} sub={`الأطول ${st.longest}`} />

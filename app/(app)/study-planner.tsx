@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/theme';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { Btn, Card, Chips, Empty, Field, IconBtn, Row, Screen, SectionTitle, T } from '@/components/ui';
@@ -9,6 +10,7 @@ import { insert, remove, useQuery, useRows } from '@/lib/db';
  * by weekly hour goal, weighted up as the exam gets closer.
  */
 export default function StudyPlanner() {
+  const { c } = useTheme();
   const slots = useQuery('study_slots', undefined, (a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
   const subjects = useQuery('subjects', (s) => !s.archived);
   useRows('study_sessions');
@@ -45,7 +47,7 @@ export default function StudyPlanner() {
   const goalMins = subjects.reduce((a, s) => a + (Number(s.weekly_hours) || 0) * 60, 0);
 
   return (
-    <Screen back title="المخطط الأسبوعي">
+    <Screen back="المذاكرة" backColor={c.acc.study.fg} title="المخطط الأسبوعي">
       <Card>
         <T w="semibold">أوقاتك المتاحة</T>
         <Chips value={day} onChange={setDay} options={weekdayNames.map((label, value) => ({ label, value })).sort((a, b) => ((a.value + 1) % 7) - ((b.value + 1) % 7))} />

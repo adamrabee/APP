@@ -1,24 +1,33 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SubjectEditor } from '@/components/subject-editor';
-import { Btn, Card, Check, Chips, confirm, Empty, Field, IconBtn, Pill, Row, Screen, SectionTitle, Segmented, Sheet, T } from '@/components/ui';
-import { addDays, cleanYmd, parseYmd, shortLabel, today, weekdayShort } from '@/lib/dates';
+import { Bar, Btn, Card, Check, Chips, confirm, Empty, Field, IconBtn, Row, Screen, Sheet, T } from '@/components/ui';
+import { addDays, cleanYmd, hhmm, minutesOf, parseYmd, shortLabel, timeLabel, today, weekdayNames, weekdayShort } from '@/lib/dates';
 import { get, insert, remove, rows, update, uuid, useQuery, type Row as DbRow } from '@/lib/db';
 import { generate, suggestedTimes, type Item } from '@/lib/schedule';
 import { useTheme } from '@/lib/theme';
 
+const time12 = (hm: string) => {
+  const [h, m] = hm.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return timeLabel(d);
+};
+
 /** §4.6.1 Generate Study Schedule (SP-01…SP-09). Built only from the user's own subjects and assignments. */
 export default function StudySchedule() {
   const { c } = useTheme();
-  const [tab, setTab] = useState<'schedule' | 'assignments' | 'subjects'>('schedule');
+  const blue = c.acc.study;
+  const [tab, setTab] = useState<'schedule' | 'subjects' | 'assignments'>('schedule');
   const subjects = useQuery('subjects', (s) => !s.archived, (a, b) => String(a.created_at).localeCompare(String(b.created_at)));
   const assignments = useQuery('study_assignments', undefined, (a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'));
   const schedule = useQuery('study_schedules', undefined, (a, b) => String(b.generated_at).localeCompare(String(a.generated_at)))[0];
   const items = useQuery('study_schedule_items', (i) => i.schedule_id === schedule?.id, (a, b) => a.day.localeCompare(b.day) || a.sort_order - b.sort_order, [schedule?.id]);
   const [settings, setSettings] = useState({ start: today(), days: '7', hours: '3', time: '16:00' });
+  const [openSettings, setOpenSettings] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [day, setDay] = useState<string | null>(null);
-  const [editItem, setEditItem] = useState<DbRow | 'new' | null>(null);
+  const [editItem, setEditItem] = useState<{ item: DbRow | 'new'; day: string } | null>(null);
 
   const scheduledAssignmentIds = new Set(items.filter((i) => i.assignment_id).map((i) => i.assignment_id));
   const missing = assignments.filter((a) => !a.done && !scheduledAssignmentIds.has(a.id));
@@ -38,7 +47,7 @@ export default function StudySchedule() {
       insert('study_schedule_items', { ...rest, schedule_id: sid });
     }
     setWarnings(w);
-    setDay(s.start_date);
+    setOpenSettings(false);
   }
 
   function toggleItem(i: DbRow) {
@@ -53,123 +62,194 @@ export default function StudySchedule() {
   }
 
   const days = schedule ? Array.from({ length: schedule.days }, (_, k) => addDays(schedule.start_date, k)) : [];
-  const selected = day && days.includes(day) ? day : days.includes(today()) ? today() : days[0];
-  const dayItems = items.filter((i) => i.day === selected);
-  const times = schedule ? suggestedTimes(schedule.start_time.slice(0, 5), dayItems.map((i) => i.minutes)) : [];
+  const doneItems = items.filter((i) => i.status === 'completed').length;
+  const summary = schedule
+    ? `${schedule.days} أيام · ${schedule.hours_per_day} س/يوم · من ${time12(schedule.start_time.slice(0, 5))}`
+    : `${settings.days} أيام · ${settings.hours} س/يوم · من ${time12(settings.time)}`;
+  const tabs = [
+    ['schedule', 'الجدول'],
+    ['subjects', `المواد · ${subjects.length}`],
+    ['assignments', `الواجبات · ${assignments.filter((a) => !a.done).length}`],
+  ] as const;
 
   return (
-    <Screen back title="جدول المذاكرة">
-      <Segmented
-        value={tab}
-        onChange={setTab}
-        options={[
-          { label: 'الجدول', value: 'schedule' },
-          { label: 'الواجبات', value: 'assignments' },
-          { label: 'المواد', value: 'subjects' },
-        ]}
-      />
-
-      {tab === 'schedule' && (
-        <>
-          <Card>
-            <T w="semibold">إعدادات التوزيع</T>
-            <Row>
-              <View style={{ flex: 1.4 }}>
-                <Field label="يبدأ من" value={settings.start} onChangeText={(v) => setSettings({ ...settings, start: v })} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Field label="عدد الأيام" keyboardType="number-pad" value={settings.days} onChangeText={(v) => setSettings({ ...settings, days: v })} />
-              </View>
-            </Row>
-            <Row>
-              <View style={{ flex: 1 }}>
-                <Field label="ساعات في اليوم" keyboardType="decimal-pad" value={settings.hours} onChangeText={(v) => setSettings({ ...settings, hours: v })} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Field label="ميعاد البداية" value={settings.time} onChangeText={(v) => setSettings({ ...settings, time: v })} />
-              </View>
-            </Row>
-            <Btn title="Create a Schedule" onPress={() => (schedule ? confirm('هتعمل الجدول من جديد؟ المهام المكتملة والمضافة بإيدك هتفضل زي ما هي.', create) : create())} disabled={!subjects.length} />
-            {!subjects.length && (
-              <T size={12} sub>
-                ضيف مواد وواجبات الأول.
+    <Screen back="المذاكرة" backColor={blue.fg} title="جدول المذاكرة" subtitle="بيتعمل من موادك وواجباتك إنت بس، وتقدر تعدّله براحتك." padded={false}>
+      <View style={{ paddingHorizontal: 18, gap: 14 }}>
+        <View style={{ flexDirection: 'row', backgroundColor: c.seg, borderRadius: 14, padding: 4 }}>
+          {tabs.map(([v, label]) => (
+            <Pressable key={v} onPress={() => setTab(v)} style={{ flex: 1, minHeight: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: tab === v ? c.card : 'transparent' }}>
+              <T size={13} w="semibold">
+                {label}
               </T>
-            )}
-          </Card>
-
-          {missing.length > 0 && schedule && (
-            <Card tint={c.sec.money}>
-              <T w="semibold" color={c.warn}>
-                فيه {missing.length} واجب مش في الجدول
-              </T>
-              <T size={12} sub>
-                {missing.map((m) => m.title).join('، ')} — اضغط Create a Schedule عشان يتوزعوا.
-              </T>
-            </Card>
-          )}
-          {warnings.map((w) => (
-            <Card key={w} tint={c.sec.me}>
-              <T size={13} color={c.danger}>
-                ⚠️ {w}
-              </T>
-            </Card>
+            </Pressable>
           ))}
+        </View>
 
-          {!schedule ? (
-            <Card>
-              <Empty text="لسه مفيش جدول. حدد الإعدادات واضغط Create a Schedule." mood="calm" />
-            </Card>
-          ) : (
-            <>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {days.map((d) => {
-                  const di = items.filter((i) => i.day === d);
-                  const on = d === selected;
-                  return (
-                    <Pressable key={d} onPress={() => setDay(d)} style={{ width: 64, paddingVertical: 10, borderRadius: 16, alignItems: 'center', backgroundColor: on ? c.ink : c.card }}>
-                      <T size={11} color={on ? c.onInk : c.sub}>
-                        {weekdayShort[parseYmd(d).getDay()]}
-                      </T>
-                      <T w="bold" color={on ? c.onInk : c.text}>
-                        {parseYmd(d).getDate()}
-                      </T>
-                      <T size={10} color={on ? c.onInk : c.faint}>
-                        {di.filter((i) => i.status === 'completed').length}/{di.length}
-                      </T>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-              <SectionTitle action="+ مهمة" onAction={() => setEditItem('new')}>
-                {selected ? shortLabel(selected) : ''}
-              </SectionTitle>
-              {dayItems.length === 0 && <Empty text="يوم فاضي." mood="sleep" />}
-              {dayItems.map((i, k) => {
-                const subj = get('subjects', i.subject_id);
-                return (
-                  <Card key={i.id} onPress={() => setEditItem(i)} style={{ flexDirection: 'row', alignItems: 'center', borderRightWidth: 4, borderRightColor: subj?.color ?? c.line }}>
-                    <Check on={i.status === 'completed'} onPress={() => toggleItem(i)} />
-                    <View style={{ flex: 1 }}>
-                      <T w="medium" strike={i.status === 'completed'}>
-                        {i.title}
-                      </T>
-                      <T size={12} sub>
-                        {times[k]} · {subj?.name ?? '—'} · {i.minutes} د
-                      </T>
+        {tab === 'schedule' && (
+          <>
+            <Card style={{ padding: 14, gap: 12 }}>
+              <Pressable onPress={() => setOpenSettings(!openSettings)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 32 }}>
+                <T size={14} w="bold">
+                  إعدادات التوزيع
+                </T>
+                <Row gap={4}>
+                  <T size={12} sub>
+                    {summary}
+                  </T>
+                  <Ionicons name={openSettings ? 'chevron-up' : 'chevron-down'} size={14} color={c.sub} />
+                </Row>
+              </Pressable>
+              {openSettings && (
+                <View style={{ gap: 10 }}>
+                  <Row>
+                    <View style={{ flex: 1.4 }}>
+                      <Field label="يبدأ من" value={settings.start} onChangeText={(v) => setSettings({ ...settings, start: v })} />
                     </View>
-                    <Pill text={i.status === 'completed' ? 'Completed' : 'Pending'} color={i.status === 'completed' ? c.onInk : c.sub} bg={i.status === 'completed' ? c.ink : c.bg} />
-                  </Card>
-                );
-              })}
-            </>
-          )}
-        </>
-      )}
+                    <View style={{ flex: 1 }}>
+                      <Field label="عدد الأيام" keyboardType="number-pad" value={settings.days} onChangeText={(v) => setSettings({ ...settings, days: v })} />
+                    </View>
+                  </Row>
+                  <Row>
+                    <View style={{ flex: 1 }}>
+                      <Field label="ساعات في اليوم" keyboardType="decimal-pad" value={settings.hours} onChangeText={(v) => setSettings({ ...settings, hours: v })} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Field label="ميعاد البداية" value={settings.time} onChangeText={(v) => setSettings({ ...settings, time: v })} />
+                    </View>
+                  </Row>
+                </View>
+              )}
+              <Btn
+                title="Create a Schedule"
+                icon="sparkles-outline"
+                disabled={!subjects.length}
+                style={{ minHeight: 54, borderRadius: 16 }}
+                onPress={() => (schedule ? confirm('هتعمل الجدول من جديد؟ المهام المكتملة والمضافة بإيدك هتفضل زي ما هي.', create) : create())}
+              />
+              {!subjects.length && (
+                <T size={12} sub lh={1.6}>
+                  ضيف مادة واحدة على الأقل من تبويب «المواد» عشان تقدر تعمل جدول.
+                </T>
+              )}
+            </Card>
 
-      {tab === 'assignments' && <Assignments subjects={subjects} assignments={assignments} />}
-      {tab === 'subjects' && <SubjectsManager subjects={subjects} />}
+            {missing.length > 0 && schedule && (
+              <Card tint={c.acc.worship.bg} style={{ gap: 4 }}>
+                <T size={13} w="semibold" color={c.acc.worship.fg}>
+                  فيه {missing.length} واجب مش في الجدول
+                </T>
+                <T size={12} sub>
+                  {missing.map((m) => m.title).join('، ')} — اضغط Create a Schedule عشان يتوزعوا.
+                </T>
+              </Card>
+            )}
+            {warnings.map((w) => (
+              <Card key={w} tint={c.acc.health.bg}>
+                <T size={13} color={c.acc.health.fg}>
+                  ⚠️ {w}
+                </T>
+              </Card>
+            ))}
 
-      <ItemSheet item={editItem} day={selected} days={days} dayItems={dayItems} scheduleId={schedule?.id} subjects={subjects} onClose={() => setEditItem(null)} />
+            {schedule && (
+              <Card style={{ paddingVertical: 12, paddingHorizontal: 14, borderRadius: 18, gap: 6 }}>
+                <Row style={{ justifyContent: 'space-between' }}>
+                  <T size={13} w="bold">
+                    الإنجاز
+                  </T>
+                  <T size={13} sub>
+                    {doneItems} من {items.length} مهمة
+                  </T>
+                </Row>
+                <Bar value={items.length ? doneItems / items.length : 0} color={blue.bar} />
+              </Card>
+            )}
+          </>
+        )}
+        {tab === 'assignments' && <Assignments subjects={subjects} assignments={assignments} />}
+        {tab === 'subjects' && <SubjectsManager subjects={subjects} />}
+      </View>
+
+      {tab === 'schedule' &&
+        (!schedule ? (
+          <View style={{ marginHorizontal: 18, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#D3D9E0', borderRadius: 20, paddingVertical: 22, paddingHorizontal: 16 }}>
+            <T size={13} sub center lh={1.8}>
+              لسه ما عملتش جدول.{'\n'}ضيف موادك وواجباتك، وبعدين اضغط «Create a Schedule».
+            </T>
+          </View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 18, paddingBottom: 6 }}>
+            {days.map((d) => {
+              const di = items.filter((i) => i.day === d);
+              const times = suggestedTimes(schedule.start_time.slice(0, 5), di.map((i) => i.minutes));
+              const mins = di.reduce((a, i) => a + i.minutes, 0);
+              return (
+                <View key={d} style={{ width: 168, gap: 8 }}>
+                  <View style={{ borderRadius: 14, backgroundColor: '#1F2421', paddingVertical: 10, paddingHorizontal: 12, gap: 2 }}>
+                    <T size={14} w="bold" color="#FFFFFF">
+                      {d === today() ? 'النهارده' : weekdayNames[parseYmd(d).getDay()]}
+                    </T>
+                    <Row style={{ justifyContent: 'space-between' }}>
+                      <T size={11} color="#C9CFC9">
+                        {shortLabel(d)}
+                      </T>
+                      <T size={11} color="#C9CFC9">
+                        {Math.floor(mins / 60)}س {mins % 60}د
+                      </T>
+                    </Row>
+                  </View>
+                  {di.map((i, k) => {
+                    const subj = get('subjects', i.subject_id);
+                    const isDone = i.status === 'completed';
+                    const start = times[k];
+                    const end = hhmm(minutesOf(start) + i.minutes);
+                    return (
+                      <View key={i.id} style={{ borderRadius: 16, padding: 10, gap: 6, backgroundColor: isDone ? c.doneBg : c.card, borderWidth: 1, borderColor: isDone ? c.doneBorder : '#ECE9E2' }}>
+                        <Pressable
+                          onPress={() => toggleItem(i)}
+                          style={{ alignSelf: 'flex-start', minHeight: 28, paddingHorizontal: 9, borderRadius: 999, borderWidth: 1, justifyContent: 'center', borderColor: isDone ? c.primaryDark : '#E3DFD6', backgroundColor: isDone ? c.primaryDark : c.card }}
+                        >
+                          <T size={11} w="bold" color={isDone ? '#FFFFFF' : c.sub}>
+                            {isDone ? '✓ Completed' : '○ Pending'}
+                          </T>
+                        </Pressable>
+                        <Pressable onPress={() => setEditItem({ item: i, day: d })} style={{ gap: 3 }}>
+                          <Row gap={5}>
+                            <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: subj?.color ?? c.faint }} />
+                            <T size={11} w="semibold" color={c.sub2}>
+                              {subj?.name ?? '—'}
+                            </T>
+                          </Row>
+                          <T size={13} w="bold" lh={1.4}>
+                            {i.title}
+                          </T>
+                          <T size={10} sub>
+                            {time12(start)} – {time12(end)}
+                          </T>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                  <Pressable onPress={() => setEditItem({ item: 'new', day: d })} style={{ minHeight: 48, borderRadius: 16, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#D3D9E0', alignItems: 'center', justifyContent: 'center' }}>
+                    <T size={20} color="#8A94A0">
+                      +
+                    </T>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </ScrollView>
+        ))}
+
+      <ItemSheet
+        item={editItem?.item ?? null}
+        day={editItem?.day}
+        days={days}
+        dayItems={items.filter((i) => i.day === editItem?.day)}
+        scheduleId={schedule?.id}
+        subjects={subjects}
+        onClose={() => setEditItem(null)}
+      />
     </Screen>
   );
 }

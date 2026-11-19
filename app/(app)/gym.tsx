@@ -10,7 +10,7 @@ import { useTheme } from '@/lib/theme';
 export default function Gym() {
   const [tab, setTab] = useState<'workout' | 'food' | 'weight'>('workout');
   return (
-    <Screen back title="الجيم والأكل">
+    <Screen back="me" title="الجيم والأكل">
       <Segmented value={tab} onChange={setTab} options={[{ label: 'التمرين', value: 'workout' }, { label: 'الأكل', value: 'food' }, { label: 'الوزن', value: 'weight' }]} />
       {tab === 'workout' && <Workout />}
       {tab === 'food' && <Food />}

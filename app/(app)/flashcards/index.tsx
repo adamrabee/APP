@@ -25,7 +25,7 @@ export default function Flashcards() {
 
   if (!card) {
     return (
-      <Screen back title="البطاقات">
+      <Screen back="المذاكرة" backColor={c.acc.study.fg} title="البطاقات">
         <Card>
           <Empty text={queue.length ? `خلصت ${queue.length} بطاقة 👏` : 'مفيش بطاقات مستحقة دلوقتي.'} mood={queue.length ? 'stars' : 'happy'} />
         </Card>
@@ -38,7 +38,7 @@ export default function Flashcards() {
     setI(i + 1);
   };
   return (
-    <Screen back title={`البطاقات ${i + 1}/${queue.length}`}>
+    <Screen back="المذاكرة" backColor={c.acc.study.fg} title={`البطاقات ${i + 1}/${queue.length}`}>
       <T sub center>
         {get('subjects', card.subject_id)?.name}
       </T>

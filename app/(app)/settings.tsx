@@ -38,7 +38,7 @@ export default function Settings() {
   const groups = Array.from(new Set(NOTIF_META.map((m) => m.group)));
 
   return (
-    <Screen back title="الإعدادات">
+    <Screen back="me" title="الإعدادات">
       <SectionTitle>المظهر</SectionTitle>
       <Segmented
         value={mode}

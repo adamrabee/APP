@@ -24,8 +24,8 @@ export default function Goals() {
   };
 
   return (
-    <Screen back title="الأهداف والعدّادات">
-      <Card tint={c.sec.study}>
+    <Screen back="المذاكرة" backColor={c.acc.study.fg} title="الأهداف والعدّادات">
+      <Card tint={c.acc.study.bg}>
         <T w="semibold">دخول الجامعة</T>
         {profile?.university_date ? (
           <Row>
