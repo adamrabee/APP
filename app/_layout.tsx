@@ -1,55 +1,79 @@
-import { useFonts } from 'expo-font';
+import {
+  IBMPlexSansArabic_400Regular,
+  IBMPlexSansArabic_500Medium,
+  IBMPlexSansArabic_600SemiBold,
+  IBMPlexSansArabic_700Bold,
+  useFonts,
+} from '@expo-google-fonts/ibm-plex-sans-arabic';
+import * as Notifications from 'expo-notifications';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { I18nManager, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
+import { AuthProvider, useAuth } from '@/lib/auth';
+import { AppThemeProvider, useTheme } from '@/lib/theme';
 
-import { useColorScheme } from '@/components/useColorScheme';
+export { ErrorBoundary } from 'expo-router';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+// Arabic-first UI (BRD §5). Native config also forces RTL; this covers dev clients.
+if (!I18nManager.isRTL && Platform.OS !== 'web') {
+  I18nManager.allowRTL(true);
+  I18nManager.forceRTL(true);
+}
 
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  anchor: '(tabs)',
-};
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  const [loaded] = useFonts({
+    IBMPlexSansArabic_400Regular,
+    IBMPlexSansArabic_500Medium,
+    IBMPlexSansArabic_600SemiBold,
+    IBMPlexSansArabic_700Bold,
   });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
-  }
-
-  return <RootLayoutNav />;
+  if (!loaded) return null;
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AppThemeProvider>
+        <AuthProvider>
+          <Nav />
+        </AuthProvider>
+      </AppThemeProvider>
+    </GestureHandlerRootView>
+  );
 }
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
+function Nav() {
+  const { session, ready } = useAuth();
+  const { mode, c } = useTheme();
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync();
+  }, [ready]);
+  if (!ready) return null;
+  const base = mode === 'dark' ? DarkTheme : DefaultTheme;
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+    <ThemeProvider value={{ ...base, colors: { ...base.colors, background: c.bg, card: c.card, text: c.text, primary: c.primary, border: c.line } }}>
+      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
+        <Stack.Protected guard={!!session}>
+          <Stack.Screen name="(app)" />
+        </Stack.Protected>
+        <Stack.Protected guard={!session}>
+          <Stack.Screen name="sign-in" />
+        </Stack.Protected>
       </Stack>
     </ThemeProvider>
   );
