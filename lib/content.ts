@@ -64,3 +64,4 @@ export const defaultSkincare = {
   AM: ['غسول', 'سيروم', 'مرطب', 'واقي شمس'],
   PM: ['غسول', 'سيروم', 'مرطب'],
 };
+export const JOURNAL_LOCK_KEY = 'me.journalLock';
