@@ -192,7 +192,8 @@ export default function Today() {
 
       {/* H-05 summary */}
       <Row>
-        <SummaryCard label={uniLabel} value={uniDays ?? '—'} unit="يوم" onPress={() => router.push('/goals')} />
+        {/* only when the user added a countdown themselves (goals / university date) */}
+        {uniDays !== null && <SummaryCard label={uniLabel} value={uniDays} unit="يوم" onPress={() => router.push('/goals')} />}
         <SummaryCard label="مصروف اليوم" value={spent} unit="ر.س" onPress={() => router.push('/money')} />
       </Row>
     </Screen>

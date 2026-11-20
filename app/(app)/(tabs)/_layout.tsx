@@ -31,7 +31,10 @@ export default function TabsLayout() {
   );
 }
 
-function TabBar({ state, navigation }: { state: any; navigation: any }) {
+// Tab bar props here don't include `navigation`, so tabs navigate through the router.
+const tabHref: Record<string, '/' | '/tasks' | '/work' | '/study' | '/me'> = { index: '/', tasks: '/tasks', work: '/work', study: '/study', me: '/me' };
+
+function TabBar({ state }: { state: any }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -57,8 +60,7 @@ function TabBar({ state, navigation }: { state: any; navigation: any }) {
               key={route.key}
               onPress={() => {
                 tap();
-                const e = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-                if (!focused && !e.defaultPrevented) navigation.navigate(route.name);
+                if (!focused) router.navigate(tabHref[route.name] ?? '/');
               }}
               style={{ width: 64, minHeight: 48, alignItems: 'center', gap: 3 }}
             >

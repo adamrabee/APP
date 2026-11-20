@@ -41,7 +41,7 @@ export default function QuickAdd() {
   return (
     <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }}>
       <Pressable style={{ flex: 1 }} onPress={close} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView behavior="padding">
         <SafeAreaView edges={['bottom']} style={{ backgroundColor: c.card, borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, gap: 14 }}>
           <Row>
             <T size={18} w="bold" style={{ flex: 1 }}>

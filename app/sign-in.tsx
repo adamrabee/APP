@@ -35,7 +35,7 @@ export default function SignIn() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, justifyContent: 'center', padding: 22, gap: 18 }}>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'center', padding: 22, gap: 18 }}>
         <View style={{ alignItems: 'center', gap: 10 }}>
           <Logo size={56} />
           <MeeArt size={110} />

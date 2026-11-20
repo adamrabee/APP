@@ -1,7 +1,7 @@
 import { View } from 'react-native';
-import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { T } from '@/components/ui';
-import { font, useTheme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 /** Minimal line chart. Points are drawn left→right in the order given. */
 export function LineChart({
@@ -35,18 +35,27 @@ export function LineChart({
   const stroke = color ?? (dark ? '#F2F2EF' : c.ink);
   const sub = dark ? '#9BA19C' : c.sub;
   return (
-    <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
-      <Line x1={pad} x2={W - pad} y1={H - 24} y2={H - 24} stroke={dark ? '#2A2E2B' : c.line} />
-      <Path d={d} stroke={stroke} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-      {values.map((v, i) => (
-        <Circle key={i} cx={x(i)} cy={y(v)} r={i === highlight ? 6 : 3.5} fill={i === highlight ? (dark ? '#8DB39A' : c.primary) : stroke} />
-      ))}
-      {labels?.map((l, i) => (
-        <SvgText key={i} x={x(i)} y={H - 6} fontSize={10} fill={sub} textAnchor="middle" fontFamily={font.regular}>
-          {l}
-        </SvgText>
-      ))}
-    </Svg>
+    <View>
+      <Svg width="100%" height={H - 16} viewBox={`0 0 ${W} ${H - 16}`}>
+        <Line x1={pad} x2={W - pad} y1={H - 24} y2={H - 24} stroke={dark ? '#2A2E2B' : c.line} />
+        <Path d={d} stroke={stroke} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        {values.map((v, i) => (
+          <Circle key={i} cx={x(i)} cy={y(v)} r={i === highlight ? 6 : 3.5} fill={i === highlight ? (dark ? '#8DB39A' : c.primary) : stroke} />
+        ))}
+      </Svg>
+      {/* Labels as real text (SVG text doesn't join Arabic letters). LTR box so positions match the points. */}
+      {labels ? (
+        <View style={{ height: 20, direction: 'ltr' }}>
+          {labels.map((l, i) => (
+            <View key={i} style={{ position: 'absolute', left: `${(x(i) / W) * 100}%`, width: 44, marginLeft: -22, alignItems: 'center' }}>
+              <T size={10} color={sub} lh={1.4} lines={1}>
+                {l}
+              </T>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 

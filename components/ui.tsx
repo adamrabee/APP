@@ -119,8 +119,10 @@ export function Screen({
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg ?? c.bg }} edges={['top']}>
       {scroll ? (
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
           contentContainerStyle={{ paddingHorizontal: padded ? 20 : 0, paddingTop: back ? 8 : 20, paddingBottom: 130, gap: 20 }}
           refreshControl={
             <RefreshControl
@@ -136,6 +138,7 @@ export function Screen({
           {head}
           {children}
         </ScrollView>
+        </KeyboardAvoidingView>
       ) : (
         <View style={{ flex: 1 }}>
           <View style={{ paddingHorizontal: 16, paddingTop: back ? 8 : 16 }}>{head}</View>
@@ -537,9 +540,9 @@ export function Stat({ label, value, unit, sub, onPress, children }: { label: st
 export function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
   const { c } = useTheme();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} onPress={onClose} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView behavior="padding">
         <View style={{ backgroundColor: c.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 34, gap: 14, maxHeight: '90%' }}>
           <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.track }} />
           {title && (
