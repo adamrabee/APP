@@ -16,6 +16,7 @@ export const supabase = createClient(url, key, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    flowType: 'pkce', // OAuth (Google) returns a ?code= we exchange for a session
   },
 });
 

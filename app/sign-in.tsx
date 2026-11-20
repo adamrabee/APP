@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAvoidingView, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Logo, MeeArt } from '@/components/mee';
-import { Btn, Card, Field, Segmented, T } from '@/components/ui';
-import { signIn, signUp } from '@/lib/auth';
+import { Btn, Card, Field, Row, Segmented, T } from '@/components/ui';
+import { signIn, signInWithGoogle, signUp } from '@/lib/auth';
 import { useTheme } from '@/lib/theme';
 
 export default function SignIn() {
@@ -47,6 +48,29 @@ export default function SignIn() {
           </T>
         </View>
         <Card style={{ gap: 14 }}>
+          <Pressable
+            disabled={busy}
+            onPress={async () => {
+              setBusy(true);
+              setMsg(null);
+              const r = await signInWithGoogle();
+              setBusy(false);
+              if (r.error) setMsg({ text: r.error.includes('provider is not enabled') ? 'دخول Google لسه ما اتفعّلش في Supabase.' : r.error });
+            }}
+            style={({ pressed }) => ({ minHeight: 52, borderRadius: 14, borderWidth: 1, borderColor: c.border, backgroundColor: c.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: pressed || busy ? 0.7 : 1 })}
+          >
+            <Ionicons name="logo-google" size={20} color="#4285F4" />
+            <T size={15} w="bold">
+              المتابعة بحساب Google
+            </T>
+          </Pressable>
+          <Row gap={10}>
+            <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+            <T size={12} sub>
+              أو بالإيميل
+            </T>
+            <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+          </Row>
           <Segmented
             value={mode}
             onChange={setMode}
